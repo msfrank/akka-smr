@@ -5,16 +5,15 @@ import scala.concurrent.duration._
 
 import RaftProcessor.{ProcessorState,ProcessorData}
 
-class RaftProcessor[C <: Command, R <: Result] extends Actor with LoggingFSM[ProcessorState,ProcessorData] {
+class RaftProcessor(val electionTimeout: FiniteDuration) extends Actor with LoggingFSM[ProcessorState,ProcessorData] {
   import RaftProcessor._
-
-  // configuration
-  val electionTimeout: FiniteDuration = 30.seconds
+  import context.dispatcher
 
   // cluster state
   var peers: Set[ActorRef] = Set.empty
 
   // persistent server state
+  // FIXME: load from persistent storage, perhaps use akka-persistence?
   var currentTerm: Long = 0
   var logEntries: Vector[LogEntry] = Vector.empty
   var votedFor: ActorRef = ActorRef.noSender
@@ -147,7 +146,8 @@ class RaftProcessor[C <: Command, R <: Result] extends Actor with LoggingFSM[Pro
 }
 
 object RaftProcessor {
-  def props() = Props[RaftProcessor]
+
+  def props(electionTimeout: FiniteDuration) = Props(classOf[RaftProcessor], electionTimeout)
 
   sealed trait ProcessorState
   case object Initializing extends ProcessorState
@@ -169,7 +169,7 @@ object RaftProcessor {
   case object ElectionTimedOut
 
   case class LogEntry(command: Command, index: Long, term: Long)
-  case object InitialEntry extends LogEntry(NullCommand, 0, 0)
+  val InitialEntry = LogEntry(NullCommand, 0, 0)
 }
 
 /**
