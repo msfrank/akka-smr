@@ -49,10 +49,14 @@ class RaftProcessor(val electionTimeout: FiniteDuration) extends Actor with Logg
 
     case Event(StateTimeout, follower: Follower) =>
       log.debug("received no messages for %s, election must be held", electionTimeout)
-      val scheduledCall = context.system.scheduler.scheduleOnce(electionTimeout, self, ElectionTimedOut)
+      // FIXME: randomize the election timeout
+      val scheduledCall = context.system.scheduler.scheduleOnce(electionTimeout, self, ElectionTimeout)
       goto(Candidate) using Candidate(Set.empty, scheduledCall)
   }
 
+  /*
+   *
+   */
   onTransition {
 
     case _ -> Candidate =>
@@ -64,15 +68,18 @@ class RaftProcessor(val electionTimeout: FiniteDuration) extends Actor with Logg
       currentTerm = nextTerm
       votedFor = self
 
-    case Candidate -> Follower => nextStateData match {
+    case Candidate -> Follower =>
+      stateData match {
+        case Candidate(_, scheduledCall) => scheduledCall.cancel()
+        case _ => // do nothing
+      }
+      nextStateData match {
       case Follower(Some(leader)) =>
         log.debug("%s becomes the new leader", leader)
       case Follower(None) =>
         log.debug("we become follower, awaiting communication from new leader")
     }
 
-    case Candidate -> Leader =>
-      log.debug("election complete, we become the new leader")
   }
 
   /*
@@ -83,7 +90,6 @@ class RaftProcessor(val electionTimeout: FiniteDuration) extends Actor with Logg
     case Event(RequestVote(candidateTerm, candidateLastIndex, candidateLastTerm), Candidate(_, scheduledCall)) if candidateTerm > currentTerm =>
       // we are not in the current term, so withdraw our candidacy
       currentTerm = candidateTerm
-      scheduledCall.cancel()
       goto(Follower) using Follower(None)
 
     case Event(RequestVote(candidateTerm, candidateLastIndex, candidateLastTerm), _) =>
@@ -107,69 +113,147 @@ class RaftProcessor(val electionTimeout: FiniteDuration) extends Actor with Logg
         }
       }
 
-    case Event(RequestVoteResult(candidateTerm, voteGranted), Candidate(_, scheduledCall)) if candidateTerm > currentTerm =>
+    case Event(RequestVoteResult(candidateTerm, voteGranted), _) if candidateTerm > currentTerm =>
       // we are not in the current term, so withdraw our candidacy
       currentTerm = candidateTerm
-      scheduledCall.cancel()
       goto(Follower) using Follower(None)
 
     case Event(RequestVoteResult(candidateTerm, voteGranted), Candidate(currentTally, scheduledCall)) =>
       // FIXME: is it correct to ignore results with candidateTerm < currentTerm?
       val votesReceived = if (voteGranted && candidateTerm == currentTerm) currentTally + sender else currentTally
-      stay() using Candidate(votesReceived, scheduledCall)
+      // if we have received a majority of votes, then become leader
+      if (votesReceived.size > (peers.size / 2)) {
+        val lastEntry = logEntries.lastOption.getOrElse(InitialEntry)
+        val followerState = peers.map(_ -> PeerLogState(lastEntry.index + 1, 0)).toMap
+        goto(Leader) using Leader(followerState, None)
+      } else stay() using Candidate(votesReceived, scheduledCall)
 
-    case Event(appendEntries: AppendEntries, Candidate(_, scheduledCall)) =>
+    case Event(appendEntries: AppendEntries, _) =>
       // if we receive AppendEntries with a current or newer term, then accept sender as new leader
       if (appendEntries.term >= currentTerm) {
         currentTerm = appendEntries.term
-        scheduledCall.cancel()
         self forward appendEntries  // reinject message for processing in Follower state
         goto(Follower) using Follower(Some(sender))
-      } else stay()
+      } else {
+        // otherwise ignore and notify sender of the current term
+        stay() replying AppendEntriesResult(currentTerm, hasEntry = false)
+      }
 
 
-    case Event(ElectionTimedOut, _) =>
+    case Event(ElectionTimeout, _) =>
       log.debug("election had no result")
-      val scheduledCall = context.system.scheduler.scheduleOnce(electionTimeout, self, ElectionTimedOut)
+      // FIXME: randomize the election timeout
+      val scheduledCall = context.system.scheduler.scheduleOnce(electionTimeout, self, ElectionTimeout)
       goto(Candidate) using Candidate(Set.empty, scheduledCall)
   }
 
   /*
    *
    */
+  onTransition {
+
+    case Candidate -> Leader =>
+      stateData match {
+        case Candidate(_, scheduledCall) => scheduledCall.cancel()
+        case _ => // do nothing
+      }
+      log.debug("election complete, we become the new leader")
+      self ! IdleTimeout
+
+    case Leader -> Follower =>
+      nextStateData match {
+        case Follower(Some(leader)) =>
+          log.debug("following new leader %s", leader)
+        case _ => // do nothing
+      }
+  }
+
+  /*
+   *
+   */
   when(Leader) {
-    case Event(_, _) =>
-      stay()
+
+    case Event(AppendEntries(followerTerm, _, _, _, _), Leader(_, scheduledCall)) if followerTerm > currentTerm =>
+      log.debug("a new leader has been discovered with term %i", followerTerm)
+      scheduledCall.foreach(_.cancel())
+      goto(Follower) using Follower(Some(sender))
+
+    case Event(AppendEntriesResult(followerTerm, hasEntry), Leader(followerState, scheduledCall)) =>
+      scheduledCall.foreach(_.cancel())
+      if (followerTerm > currentTerm) {
+        log.debug("a new leader has been discovered with term %i", followerTerm)
+        goto(Follower) using Follower(Some(sender))
+      } else {
+        val peerLogState = followerState(sender)
+        val followerUpdate = if (hasEntry) {
+          sender -> PeerLogState(peerLogState.nextIndex + 1, peerLogState.matchIndex)
+        } else {
+          sender -> PeerLogState(peerLogState.nextIndex - 1, peerLogState.matchIndex)
+        }
+        stay() using Leader(followerState + followerUpdate, Some(scheduleIdleTimeout))
+      }
+
+    case Event(IdleTimeout, Leader(followerState, _)) =>
+      // send heartbeat to peers
+      val lastEntry = if (logEntries.isEmpty) InitialEntry else logEntries.last
+      val appendEntries = AppendEntries(currentTerm, lastEntry.index, lastEntry.term, Vector.empty, commitIndex)
+      peers.foreach(_ ! appendEntries)
+      stay() using Leader(followerState, Some(scheduleIdleTimeout))
   }
 
   initialize()
+
+  /**
+   * 
+   */
+  def scheduleIdleTimeout: Cancellable = context.system.scheduler.scheduleOnce(electionTimeout / 2, self, IdleTimeout)
+  
+  /**
+   *
+   */
+//  def buildAppendEntries(forPeer: Option[PeerLogState]): AppendEntries = forPeer match {
+//    // if there is peer state
+//    case Some(PeerLogState(nextIndex, matchIndex)) =>
+//
+//
+//    // if there is no peer state, then send the index and term for the latest log (section 5.3)
+//    case None =>
+//      val lastEntry = if (logEntries.isEmpty) InitialEntry else logEntries.last
+//      AppendEntries(currentTerm, lastEntry.index, lastEntry.term, Vector.empty, commitIndex)
+//  }
+
 }
 
 object RaftProcessor {
 
   def props(electionTimeout: FiniteDuration) = Props(classOf[RaftProcessor], electionTimeout)
 
+  case class LogEntry(command: Command, index: Long, term: Long)
+  val InitialEntry = LogEntry(NullCommand, 0, 0)
+
+  case class PeerLogState(nextIndex: Long, matchIndex: Long)
+
+  // FSM state
   sealed trait ProcessorState
   case object Initializing extends ProcessorState
   case object Candidate extends ProcessorState
   case object Leader extends ProcessorState
   case object Follower extends ProcessorState
 
+  // FSM data
   sealed trait ProcessorData
-  case class Leader(nextIndex: Map[ActorRef,Long], matchIndex: Map[ActorRef,Long]) extends ProcessorData
   case class Follower(leader: Option[ActorRef]) extends ProcessorData
+  case class Leader(followerState: Map[ActorRef,PeerLogState], scheduledCall: Option[Cancellable]) extends ProcessorData
   case class Candidate(votesReceived: Set[ActorRef], scheduledCall: Cancellable) extends ProcessorData
 
+  // raft RPC messages
   case class RequestVote(candidateTerm: Long, candidateLastIndex: Long, candidateLastTerm: Long)
   case class RequestVoteResult(term: Long, voteGranted: Boolean)
-
-  case class AppendEntries(term: Long, leader: ActorRef, prevLogIndex: Long, prevLogTerm: Long, entries: Vector[AnyRef], leaderCommit: Long)
+  case class AppendEntries(term: Long, prevLogIndex: Long, prevLogTerm: Long, entries: Vector[AnyRef], leaderCommit: Long)
   case class AppendEntriesResult(term: Long, hasEntry: Boolean)
 
-  case object ElectionTimedOut
-
-  case class LogEntry(command: Command, index: Long, term: Long)
-  val InitialEntry = LogEntry(NullCommand, 0, 0)
+  case object ElectionTimeout
+  case object IdleTimeout
 }
 
 /**
