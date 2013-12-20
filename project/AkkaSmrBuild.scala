@@ -20,7 +20,8 @@ object AkkaSmrBuild extends Build {
         "com.typesafe.akka" %% "akka-cluster" % akkaVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "org.scalatest" %% "scalatest" % "2.0" % "test",
-        "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test"
+        "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
+        "ch.qos.logback" % "logback-classic" % "1.0.13" % "test"
       )
     )
   )

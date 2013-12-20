@@ -18,11 +18,11 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
 
   // configuration
   val executor: ActorRef
+  val monitor: ActorRef
   val electionTimeout: FiniteDuration
 
   // persistent server state
   var currentTerm: Int
-  var currentIndex: Int
   var logEntries: Vector[LogEntry]
   var votedFor: ActorRef
 
@@ -54,7 +54,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
           // otherwise, grant the vote
           case _ =>
             votedFor = candidate
-            log.debug("granted vote to %s for term %i", candidate, candidateTerm)
+            log.debug("granted vote to {} for term {}", candidate, candidateTerm)
             stay() replying RequestVoteResult(currentTerm, voteGranted = true)
         }
       }
@@ -69,9 +69,16 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       val votesReceived = if (voteGranted && candidateTerm == currentTerm) currentTally + sender else currentTally
       // if we have received a majority of votes, then become leader
       if (votesReceived.size > (peers.size / 2)) {
-        self ! StartSynchronizing
-        goto(Leader) using Leader(Map.empty, Vector.empty)
-      } else stay() using Candidate(votesReceived, nextElection)
+        val lastEntry = logEntries.lastOption.getOrElse(InitialEntry)
+        val followerStates = peers.map { peer =>
+          val followerState = FollowerState(peer, lastEntry.index + 1, 0, isSyncing = false, None)
+          peer -> followerState
+        }.toMap
+        self ! SynchronizeInitial
+        goto(Leader) using Leader(followerStates, Vector.empty)
+      }
+      else
+        stay() using Candidate(votesReceived, nextElection)
 
     case Event(appendEntries: AppendEntriesRPC, _) =>
       // if we receive AppendEntries with a current or newer term, then accept sender as new leader
@@ -94,11 +101,12 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
 
 
   onTransition {
-    case _ -> Candidate =>
+    case transition @ _ -> Candidate =>
+      monitor ! transition
       val nextTerm = currentTerm + 1
       val lastEntry = if (logEntries.isEmpty) InitialEntry else logEntries.last
       val vote = RequestVoteRPC(nextTerm, lastEntry.index, lastEntry.term)
-      log.debug("we transition to candidate and cast vote %s", vote)
+      log.debug("we transition to candidate and cast vote {}", vote)
       peers.foreach(_ ! vote)
       currentTerm = nextTerm
       votedFor = self

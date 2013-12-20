@@ -3,43 +3,50 @@ package com.syntaxjockey.smr.raft
 import akka.actor._
 import scala.concurrent.duration._
 
+import com.syntaxjockey.smr._
 import RaftProcessor.{ProcessorState,ProcessorData}
 
 /**
  *
  */
-case class RaftProcessor(executor: ActorRef, electionTimeout: FiniteDuration, idleTimeout: FiniteDuration, applyTimeout: FiniteDuration, maxEntriesBatch: Int)
+class RaftProcessor(val executor: ActorRef,
+                    val monitor: ActorRef,
+                    val electionTimeout: FiniteDuration,
+                    val idleTimeout: FiniteDuration,
+                    val applyTimeout: FiniteDuration,
+                    val maxEntriesBatch: Int)
   extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperations with CandidateOperations with LeaderOperations {
   import RaftProcessor._
 
   val ec = context.dispatcher
 
-  // cluster state
-  var peers: Set[ActorRef] = Set.empty
-
   // persistent server state
   var currentTerm: Int = 0
-  var currentIndex: Int = 1
   var logEntries: Vector[LogEntry] = Vector(InitialEntry)
   var votedFor: ActorRef = ActorRef.noSender
 
   // volatile server state
+  var peers: Set[ActorRef] = Set.empty
   var commitIndex: Int = 0
   var lastApplied: Int = 0
 
-  startWith(Initializing, Follower(None))
+  startWith(Initializing, Initializing(Vector.empty))
 
   /*
    * Initializing is a special state not described in the Raft paper.  the RaftProcessor
-   * FSM starts in Initializing and waits for a ProcessorSet message that describes the
-   * initial cluster.  Once received, the FSM moves to Follower state and never transitions
-   * to Initializing again.
+   * FSM starts in Initializing and waits for a StartProcessing message. Once received,
+   * the FSM moves to Follower state and never transitions to Initializing again.
    */
   when(Initializing) {
-    case Event(ProcessorSet(processors), _) =>
-      peers = processors - self
-      log.debug("initialized processor with %i peers: %s", peers.size, peers)
-      goto(Follower) forMax electionTimeout
+    case Event(StartProcessing(_peers), Initializing(buffered)) =>
+      log.debug("starting processing with peers {}", _peers)
+      peers = _peers
+      // redeliver any buffered messages
+      buffered.foreach { case (msg,_sender) => self.tell(msg, _sender) }
+      goto(Follower) using Follower(None) forMax electionTimeout
+    case Event(msg, Initializing(buffered)) =>
+      log.debug("buffering message {}", msg)
+      stay() using Initializing(buffered :+ msg -> sender)
   }
 
   initialize()
@@ -48,10 +55,16 @@ case class RaftProcessor(executor: ActorRef, electionTimeout: FiniteDuration, id
 
 object RaftProcessor {
 
-  def props(executor: ActorRef, electionTimeout: FiniteDuration, idleTimeout: FiniteDuration, applyTimeout: FiniteDuration, batchSize: Int) = {
-    Props(classOf[RaftProcessor], executor, electionTimeout, idleTimeout, applyTimeout, batchSize)
+  def props(executor: ActorRef,
+            monitor: ActorRef,
+            electionTimeout: FiniteDuration = 500.milliseconds,
+            idleTimeout: FiniteDuration = 20.milliseconds,
+            applyTimeout: FiniteDuration = 10.seconds,
+            batchSize: Int = 10) = {
+    Props(classOf[RaftProcessor], executor, monitor, electionTimeout, idleTimeout, applyTimeout, batchSize)
   }
 
+  // helper classes
   case class LogEntry(command: Command, caller: ActorRef, index: Int, term: Int)
   case class FollowerState(follower: ActorRef, nextIndex: Int, matchIndex: Int, isSyncing: Boolean, nextHeartbeat: Option[Cancellable])
   case class CommandResponse(result: Result, command: Command, logEntry: LogEntry)
@@ -67,6 +80,7 @@ object RaftProcessor {
 
   // FSM data
   sealed trait ProcessorData
+  case class Initializing(buffered: Vector[(Any,ActorRef)]) extends ProcessorData
   case class Follower(leader: Option[ActorRef]) extends ProcessorData
   case class Candidate(votesReceived: Set[ActorRef], nextElection: Cancellable) extends ProcessorData
   case class Leader(followerStates: Map[ActorRef,FollowerState], commitQueue: Vector[LogEntry]) extends ProcessorData
@@ -75,12 +89,15 @@ object RaftProcessor {
   sealed trait RPC
   sealed trait RPCResult
   case class RPCResponse(result: RPCResult, command: RPC, remote: ActorRef)
-  case class RequestVoteRPC(candidateTerm: Int, candidateLastIndex: Int, candidateLastTerm: Int) extends RPC
+  case class RequestVoteRPC(term: Int, lastLogIndex: Int, lastLogTerm: Int) extends RPC
   case class RequestVoteResult(term: Int, voteGranted: Boolean) extends RPCResult
   case class AppendEntriesRPC(term: Int, prevLogIndex: Int, prevLogTerm: Int, entries: Vector[LogEntry], leaderCommit: Int) extends RPC
   case class AppendEntriesResult(term: Int, hasEntry: Boolean) extends RPCResult
 
-  case object StartSynchronizing
+  // internal messages
+  case object StartFollowing
+  case object StartElection
+  case object SynchronizeInitial
   case object ApplyCommitted
   case object ElectionTimeout
   case class IdleTimeout(peer: ActorRef)
@@ -92,19 +109,11 @@ object RaftProcessor {
 }
 
 /**
- *  marker trait for a command operation.
+ *
  */
-trait Command
-case object NullCommand extends Command
+case class StartProcessing(peers: Set[ActorRef])
 
-/**
- * marker trait for an operation result.
- */
-trait Result
-
-case class ProcessorSet(processors: Set[ActorRef])
-case class AddProcessor(processor: ActorRef)
-case class RemoveProcessor(processor: ActorRef)
-
-case class Request(command: Command, caller: ActorRef)
-case class Response(result: Result)
+// events
+sealed trait RaftProcessorEvent
+case class ProcessorTransitionEvent(processor: ActorRef, prevState: ProcessorState, newState: ProcessorState) extends RaftProcessorEvent
+case class LeaderElectionEvent(leader: ActorRef, term: Int) extends RaftProcessorEvent
