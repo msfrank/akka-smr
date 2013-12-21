@@ -1,13 +1,14 @@
 package com.syntaxjockey.smr.raft
 
-import org.scalatest.{WordSpecLike, BeforeAndAfterAll, Matchers}
+import org.scalatest.{WordSpecLike, BeforeAndAfterAll}
+import org.scalatest.matchers.MustMatchers
 
 import akka.actor.{ActorLogging, Props, Actor, ActorSystem}
 import akka.testkit.{ImplicitSender, TestKit}
 import com.typesafe.config.ConfigFactory
 import scala.concurrent.duration._
 
-class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpecLike with Matchers with BeforeAndAfterAll {
+class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpecLike with MustMatchers with BeforeAndAfterAll {
   import RaftProcessor._
   import TestExecutor._
 
@@ -67,6 +68,24 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
       expectMsg(TestResult(2))
       expectMsg(TestResult(3))
     }
+
+    "ignore a message if it is not a Command" in {
+      val executor = system.actorOf(Props[TestExecutor])
+      val processor1 = system.actorOf(RaftProcessor.props(executor, self, 1 second))
+      val processor2 = system.actorOf(RaftProcessor.props(executor, self, 2 second))
+      val processor3 = system.actorOf(RaftProcessor.props(executor, self, 2 second))
+      processor1 ! StartProcessing(Set(processor2, processor3))
+      processor2 ! StartProcessing(Set(processor1, processor3))
+      processor3 ! StartProcessing(Set(processor1, processor2))
+      receiveN(5)
+      processor1 ! TestCommand(1)
+      processor1 ! TestCommand(2)
+      processor1 ! TestCommand(3)
+      expectMsg(TestResult(1))
+      expectMsg(TestResult(2))
+      expectMsg(TestResult(3))
+    }
+
   }
 }
 

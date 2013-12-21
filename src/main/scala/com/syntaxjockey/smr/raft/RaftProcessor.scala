@@ -69,6 +69,7 @@ object RaftProcessor {
   case class FollowerState(follower: ActorRef, nextIndex: Int, matchIndex: Int, isSyncing: Boolean, nextHeartbeat: Option[Cancellable])
   case class CommandResponse(result: Result, command: Command, logEntry: LogEntry)
 
+  case object NullCommand extends Command
   val InitialEntry = LogEntry(NullCommand, ActorRef.noSender, 0, 0)
 
   // FSM state
@@ -105,7 +106,8 @@ object RaftProcessor {
   // exceptions
   case class RPCFailure(cause: Throwable) extends Exception("RPC failed", cause) with RPCResult
   case class LeaderTermExpired(currentTerm: Int, leader: ActorRef) extends Exception("Leader term has expired, new term is " + currentTerm)
-  case class CommandFailed(cause: Throwable, command: Command) extends Exception("command failed to execute", cause) with Result
+  case class CommandFailed(cause: Throwable, command: Command) extends Exception("Command failed to execute", cause) with Result
+  case class NotLeader(command: Command) extends Exception("Processor is not the current leader")
 }
 
 /**
