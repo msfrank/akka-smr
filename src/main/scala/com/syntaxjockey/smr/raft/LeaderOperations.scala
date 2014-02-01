@@ -7,7 +7,7 @@ import akka.util.Timeout
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{TimeoutException, ExecutionContext, Future}
 
-import com.syntaxjockey.smr._
+import com.syntaxjockey.smr.{Command,Result,CommandFailed}
 import RaftProcessor._
 
 /*
