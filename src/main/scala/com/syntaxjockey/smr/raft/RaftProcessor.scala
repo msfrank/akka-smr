@@ -7,6 +7,11 @@ import com.syntaxjockey.smr._
 import RaftProcessor.{ProcessorState,ProcessorData}
 
 /**
+ * marker trait to identify raft processor messages
+ */
+sealed trait RaftProcessorMessage
+
+/**
  *
  */
 class RaftProcessor(val executor: ActorRef,
@@ -87,8 +92,8 @@ object RaftProcessor {
   case class Leader(followerStates: Map[ActorRef,FollowerState], commitQueue: Vector[LogEntry]) extends ProcessorData
 
   // raft RPC messages
-  sealed trait RPC
-  sealed trait RPCResult
+  sealed trait RPC extends RaftProcessorMessage
+  sealed trait RPCResult extends RaftProcessorMessage
   case class RPCResponse(result: RPCResult, command: RPC, remote: ActorRef)
   case class RequestVoteRPC(term: Int, lastLogIndex: Int, lastLogTerm: Int) extends RPC
   case class RequestVoteResult(term: Int, voteGranted: Boolean) extends RPCResult
@@ -96,12 +101,12 @@ object RaftProcessor {
   case class AppendEntriesResult(term: Int, hasEntry: Boolean) extends RPCResult
 
   // internal messages
-  case object StartFollowing
-  case object StartElection
-  case object SynchronizeInitial
-  case object ApplyCommitted
-  case object ElectionTimeout
-  case class IdleTimeout(peer: ActorRef)
+  case object StartFollowing extends RaftProcessorMessage
+  case object StartElection extends RaftProcessorMessage
+  case object SynchronizeInitial extends RaftProcessorMessage
+  case object ApplyCommitted extends RaftProcessorMessage
+  case object ElectionTimeout extends RaftProcessorMessage
+  case class IdleTimeout(peer: ActorRef) extends RaftProcessorMessage
 
   // exceptions
   case class RPCFailure(cause: Throwable) extends Exception("RPC failed", cause) with RPCResult
