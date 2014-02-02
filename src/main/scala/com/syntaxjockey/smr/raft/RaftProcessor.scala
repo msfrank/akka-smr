@@ -122,5 +122,5 @@ case class StartProcessing(peers: Set[ActorRef])
 
 // events
 sealed trait RaftProcessorEvent
-case class ProcessorTransitionEvent(processor: ActorRef, prevState: ProcessorState, newState: ProcessorState) extends RaftProcessorEvent
+case class ProcessorTransitionEvent(prevState: ProcessorState, newState: ProcessorState) extends RaftProcessorEvent
 case class LeaderElectionEvent(leader: ActorRef, term: Int) extends RaftProcessorEvent

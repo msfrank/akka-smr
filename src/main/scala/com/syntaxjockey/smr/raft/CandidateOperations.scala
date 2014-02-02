@@ -102,7 +102,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
 
   onTransition {
     case transition @ _ -> Candidate =>
-      monitor ! transition
+      monitor ! ProcessorTransitionEvent(transition._1, transition._2)
       val nextTerm = currentTerm + 1
       val lastEntry = if (logEntries.isEmpty) InitialEntry else logEntries.last
       val vote = RequestVoteRPC(nextTerm, lastEntry.index, lastEntry.term)

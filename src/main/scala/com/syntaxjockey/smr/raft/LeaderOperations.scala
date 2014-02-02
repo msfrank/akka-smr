@@ -190,7 +190,8 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
 
   onTransition {
     case transition @ Candidate -> Leader =>
-      monitor ! transition
+      monitor ! ProcessorTransitionEvent(transition._1, transition._2)
+      monitor ! LeaderElectionEvent(self, currentTerm)
       stateData match {
         case Candidate(_, nextElection) => nextElection.cancel()
         case _ => // do nothing
@@ -199,7 +200,8 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
       self ! SynchronizeInitial
 
     case transition @ _ -> Leader =>
-      monitor ! transition
+      monitor ! ProcessorTransitionEvent(transition._1, transition._2)
+      monitor ! LeaderElectionEvent(self, currentTerm)
   }
 
   /**

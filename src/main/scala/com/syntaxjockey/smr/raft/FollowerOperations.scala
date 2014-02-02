@@ -90,6 +90,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
             AppendEntriesResult(currentTerm, hasEntry = true)
           }
         }
+        monitor ! LeaderElectionEvent(sender, currentTerm)
         stay() replying result using Follower(Some(sender)) forMax electionTimeout
       }
       else stay() replying AppendEntriesResult(currentTerm, hasEntry = false) forMax electionTimeout
@@ -103,20 +104,21 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
 
   onTransition {
     case transition @ Candidate -> Follower =>
-      monitor ! transition
+      monitor ! ProcessorTransitionEvent(transition._1, transition._2)
       stateData match {
         case Candidate(_, scheduledCall) => scheduledCall.cancel()
         case _ => // do nothing
       }
       nextStateData match {
         case Follower(Some(leader)) =>
+          monitor ! LeaderElectionEvent(leader, currentTerm)
           log.debug("{} becomes the new leader", leader)
         case Follower(None) =>
           log.debug("we become follower, awaiting communication from new leader")
       }
 
     case transition @ Leader -> Follower =>
-      monitor ! transition
+      monitor ! ProcessorTransitionEvent(transition._1, transition._2)
       stateData match {
         case Leader(followerStates, _) =>
           // cancel any scheduled heartbeats
@@ -125,11 +127,12 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
       }
       nextStateData match {
         case Follower(Some(leader)) =>
+          monitor ! LeaderElectionEvent(leader, currentTerm)
           log.debug("following new leader {}", leader)
         case _ => // do nothing
       }
 
     case transition @ _ -> Follower =>
-      monitor ! transition
+      monitor ! ProcessorTransitionEvent(transition._1, transition._2)
   }
 }
