@@ -43,13 +43,13 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
       val processor2 = system.actorOf(RaftProcessor.props(self, self, 2 second))
       val processor3 = system.actorOf(RaftProcessor.props(self, self, 3 second))
       processor1 ! StartProcessing(Set(processor2, processor3))
-      expectMsg(Initializing -> Follower)
+      expectMsg(ProcessorTransitionEvent(Initializing, Follower))
       processor2 ! StartProcessing(Set(processor1, processor3))
-      expectMsg(Initializing -> Follower)
+      expectMsg(ProcessorTransitionEvent(Initializing, Follower))
       processor3 ! StartProcessing(Set(processor1, processor2))
-      expectMsg(Initializing -> Follower)
-      expectMsg(Follower -> Candidate)  // processor1 becomes candidate after election timeout
-      expectMsg(Candidate -> Leader)    // processor1 becomes leader after receiving votes from processors 2 and 3
+      expectMsg(ProcessorTransitionEvent(Initializing, Follower))
+      expectMsg(ProcessorTransitionEvent(Follower, Candidate))  // processor1 becomes candidate after election timeout
+      expectMsg(ProcessorTransitionEvent(Candidate, Leader))    // processor1 becomes leader after receiving votes from processors 2 and 3
     }
 
     "replicate a command" in {

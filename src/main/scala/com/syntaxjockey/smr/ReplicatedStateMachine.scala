@@ -63,7 +63,6 @@ class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends 
       log.debug("found remote processor {}", ref)
       if (remoteProcessors.size >= minimumProcessors) {
         localProcessor ! StartProcessing(remoteProcessors.values.toSet)
-        monitor ! RSMReady
         log.debug("ReplicatedStateMachine is now ready")
       }
 
@@ -81,7 +80,10 @@ class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends 
       log.debug("processor transitions from {} to {}", prevState, newState)
 
     case LeaderElectionEvent(newLeader, term) =>
+      val initialized = leader.isDefined
       leader = if (newLeader == localProcessor) Some(self) else Some(remoteProcessors(newLeader.path.address))
+      if (!initialized)
+        monitor ! RSMReady
       log.debug("processor {} is now leader for term {}", newLeader, term)
 
     case command: Command =>
@@ -103,14 +105,3 @@ object ReplicatedStateMachine {
 
 case object RSMReady
 
-/**
- *  marker trait for a command operation.
- */
-trait Command
-case object NullCommand extends Command
-
-/**
- * marker trait for an operation result.
- */
-trait Result
-class CommandFailed(cause: Throwable, val command: Command) extends Exception("Command failed", cause) with Result
