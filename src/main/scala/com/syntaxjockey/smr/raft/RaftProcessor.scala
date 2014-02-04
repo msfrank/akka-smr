@@ -3,8 +3,9 @@ package com.syntaxjockey.smr.raft
 import akka.actor._
 import scala.concurrent.duration._
 
-import com.syntaxjockey.smr._
-import RaftProcessor.{ProcessorState,ProcessorData}
+import com.syntaxjockey.smr.raft.RaftProcessor.{ProcessorState, ProcessorData}
+import com.syntaxjockey.smr.{WorldState, Result, Command}
+import scala.util.{Success, Try}
 
 /**
  * marker trait to identify raft processor messages
@@ -12,7 +13,12 @@ import RaftProcessor.{ProcessorState,ProcessorData}
 sealed trait RaftProcessorMessage
 
 /**
- *
+ * A single entry in the RAFT replication log.
+ */
+case class LogEntry(command: Command, caller: ActorRef, index: Int, term: Int)
+
+/**
+ * A single processor implementing the RAFT state machine replication protocol.
  */
 class RaftProcessor(val executor: ActorRef,
                     val monitor: ActorRef,
@@ -70,11 +76,11 @@ object RaftProcessor {
   }
 
   // helper classes
-  case class LogEntry(command: Command, caller: ActorRef, index: Int, term: Int)
   case class FollowerState(follower: ActorRef, nextIndex: Int, matchIndex: Int, isSyncing: Boolean, nextHeartbeat: Option[Cancellable])
-  case class CommandResponse(result: Result, command: Command, logEntry: LogEntry)
 
-  case object NullCommand extends Command
+  case object NullCommand extends Command {
+    def apply(_world: WorldState): Try[Result] = Success(new Result { val world = _world })
+  }
   val InitialEntry = LogEntry(NullCommand, ActorRef.noSender, 0, 0)
 
   // FSM state
@@ -111,16 +117,20 @@ object RaftProcessor {
   // exceptions
   case class RPCFailure(cause: Throwable) extends Exception("RPC failed", cause) with RPCResult
   case class LeaderTermExpired(currentTerm: Int, leader: ActorRef) extends Exception("Leader term has expired, new term is " + currentTerm)
-  case class CommandFailed(cause: Throwable, command: Command) extends Exception("Command failed to execute", cause) with Result
   case class NotLeader(command: Command) extends Exception("Processor is not the current leader")
+  case class ExecutionFailed(logEntry: LogEntry, cause: Throwable) extends Exception("Failed to execute log entry", cause)
 }
 
 /**
  *
  */
 case class StartProcessing(peers: Set[ActorRef])
+case class CommandRequest(logEntry: LogEntry)
 
 // events
 sealed trait RaftProcessorEvent
+case class CommandAccepted(logEntry: LogEntry) extends RaftProcessorEvent
+case class CommandApplied(logEntry: LogEntry) extends RaftProcessorEvent
+case class CommandResponse(logEntry: LogEntry, result: Result) extends RaftProcessorEvent
 case class ProcessorTransitionEvent(prevState: ProcessorState, newState: ProcessorState) extends RaftProcessorEvent
 case class LeaderElectionEvent(leader: ActorRef, term: Int) extends RaftProcessorEvent

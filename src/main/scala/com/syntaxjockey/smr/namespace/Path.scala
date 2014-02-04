@@ -36,7 +36,13 @@ object Path {
   }
 
   def apply(path: String): Path = {
-    if (!path.startsWith("/")) throw new InvalidPathException("path is not absolute") else fromSeq(path.tail.split("/"))
+    if (path == "/") fromSeq(Seq.empty) else {
+      if (!path.startsWith("/"))
+        throw new InvalidPathException("path is not absolute")
+      if (path.endsWith("/"))
+        throw new InvalidPathException("path must not end with a path separator")
+      fromSeq(path.tail.split("/"))
+    }
   }
 
   def apply(path: Seq[String]): Path = fromSeq(path)

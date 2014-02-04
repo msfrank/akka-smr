@@ -63,7 +63,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
           follower -> updatedState
         case entry => entry
       }
-      stay() using Leader(followerStates ++ updatedStates, commitQueue)
+      stay() using Leader(followerStates ++ updatedStates, commitQueue) replying CommandAccepted(logEntry)
 
     // record the result of log replication
     case Event(RPCResponse(result: AppendEntriesResult, rpc: AppendEntriesRPC, peer), Leader(followerStates, commitQueue)) =>
@@ -121,12 +121,13 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
     case Event(ApplyCommitted, Leader(followerStates, commitQueue)) =>
       val logEntry = commitQueue.head
       commitIndex = logEntry.index
+      logEntry.caller ! CommandApplied(logEntry)
       log.debug("committed log entry {}", logEntry)
       executeCommand(logEntry) pipeTo self
       stay()
 
     // mark the log entry as applied and pass the command result to the client
-    case Event(CommandResponse(result, _, LogEntry(_, caller, index, _)), Leader(followerStates, commitQueue)) =>
+    case Event(CommandResponse(LogEntry(_, caller, index, _), result), Leader(followerStates, commitQueue)) =>
       log.debug("received command result {} from executor", result)
       caller ! result
       lastApplied = index
@@ -266,15 +267,12 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
 
   /**
    * sends the command in the specified log entry to the executor and returns
-   * CommandCompleted with the result inside.
+   * CommandResponse with the result inside.
    */
-  def executeCommand(logEntry: LogEntry): Future[CommandResponse] = {
+  def executeCommand(logEntry: LogEntry): Future[Any] = {
     implicit val _timeout = Timeout(applyTimeout.toMillis)
-    val command = logEntry.command
-    (executor ? logEntry.command).map {
-      case result: Result => CommandResponse(result, command, logEntry)
-    } recover {
-      case ex: Throwable => CommandResponse(new CommandFailed(ex, command), command, logEntry)
+    (executor ? CommandRequest(logEntry)).recover {
+      case ex: Throwable => ExecutionFailed(logEntry, ex)
     }
   }
 }

@@ -6,6 +6,6 @@ class VersionMismatch(val expected: Long, val found: Long) extends NamespaceExce
 
 class InvalidPathException(message: String) extends NamespaceException(message)
 
-class PatchFailedException(message: String) extends NamespaceException(message)
+class RootModification() extends NamespaceException("Cannot modify /")
 
 class NamespaceOperationFailed(message: String) extends NamespaceException(message)

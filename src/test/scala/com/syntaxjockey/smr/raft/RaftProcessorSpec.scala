@@ -7,6 +7,8 @@ import akka.actor.{ActorLogging, Props, Actor, ActorSystem}
 import akka.testkit.{ImplicitSender, TestKit}
 import com.typesafe.config.ConfigFactory
 import scala.concurrent.duration._
+import com.syntaxjockey.smr.WorldState
+import scala.util.Success
 
 class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpecLike with MustMatchers with BeforeAndAfterAll {
   import RaftProcessor._
@@ -64,9 +66,9 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
       processor1 ! TestCommand(1)
       processor1 ! TestCommand(2)
       processor1 ! TestCommand(3)
-      expectMsg(TestResult(1))
-      expectMsg(TestResult(2))
-      expectMsg(TestResult(3))
+      expectMsgClass(classOf[TestResult]).lsn must be === 1
+      expectMsgClass(classOf[TestResult]).lsn must be === 2
+      expectMsgClass(classOf[TestResult]).lsn must be === 3
     }
 
     "ignore a message if it is not a Command" in {
@@ -81,9 +83,9 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
       processor1 ! TestCommand(1)
       processor1 ! TestCommand(2)
       processor1 ! TestCommand(3)
-      expectMsg(TestResult(1))
-      expectMsg(TestResult(2))
-      expectMsg(TestResult(3))
+      expectMsgClass(classOf[TestResult]).lsn must be === 1
+      expectMsgClass(classOf[TestResult]).lsn must be === 2
+      expectMsgClass(classOf[TestResult]).lsn must be === 3
     }
 
   }
@@ -91,9 +93,12 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
 
 class TestExecutor extends Actor with ActorLogging {
   import TestExecutor._
+
+  var world: WorldState = WorldState(0, Map.empty)
+
   def receive = {
     case command: TestCommand =>
-      val result = TestResult(command.lsn)
+      val result = command.apply(world)
       log.debug("received {}, replying {}", command, result)
       sender ! result
   }
@@ -101,6 +106,6 @@ class TestExecutor extends Actor with ActorLogging {
 
 object TestExecutor {
   import com.syntaxjockey.smr.{Command,Result}
-  case class TestCommand(lsn: Int) extends Command
-  case class TestResult(lsn: Int) extends Result
+  case class TestCommand(lsn: Int) extends Command { def apply(world: WorldState) = Success(TestResult(lsn, world)) }
+  case class TestResult(lsn: Int, world: WorldState) extends Result
 }
