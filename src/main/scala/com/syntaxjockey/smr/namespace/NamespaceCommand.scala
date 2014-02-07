@@ -12,12 +12,13 @@ import org.joda.time.DateTime
 sealed trait NamespaceCommand extends Command
 
 case class CreateNode(namespace: String, path: Path, data: ByteString, ctime: DateTime) extends NamespaceCommand {
-  def apply(world: WorldState): Try[PathResult] = {
+  def apply(world: WorldState): Try[NodeResult] = {
     world.namespaces.get(namespace) match {
       case Some(ns) =>
-        ns.create(path, data, ctime) match {
+        val cversion = world.version + 1
+        ns.create(path, data, cversion, ctime) match {
           case Success(updated) =>
-            Success(PathResult(path, this, WorldState(updated.version, world.namespaces + (namespace -> updated))))
+            Success(NodeResult(updated.get(path), this, WorldState(cversion, world.namespaces + (namespace -> updated))))
           case Failure(ex) =>
             Failure(ex)
         }
@@ -28,12 +29,13 @@ case class CreateNode(namespace: String, path: Path, data: ByteString, ctime: Da
 }
 
 case class DeleteNode(namespace: String, path: Path, version: Option[Long], mtime: DateTime) extends NamespaceCommand {
-  def apply(world: WorldState): Try[NoneResult] = {
+  def apply(world: WorldState): Try[EmptyResult] = {
     world.namespaces.get(namespace) match {
       case Some(ns) =>
-        ns.delete(path, version, mtime) match {
+        val mversion = world.version + 1
+        ns.delete(path, version, mversion, mtime) match {
           case Success(updated) =>
-            Success(NoneResult(this, WorldState(updated.version, world.namespaces + (namespace -> updated))))
+            Success(EmptyResult(this, WorldState(mversion, world.namespaces + (namespace -> updated))))
           case Failure(ex) =>
             Failure(ex)
         }
@@ -43,17 +45,48 @@ case class DeleteNode(namespace: String, path: Path, version: Option[Long], mtim
   }
 }
 
-//case class NodeExists(namespace: String, path: Path) extends NamespaceCommand
-
-case class GetNodeData(namespace: String, path: Path) extends NamespaceCommand {
-  def apply(world: WorldState): Try[ChildrenAndStatResult] = {
+case class NodeExists(namespace: String, path: Path) extends NamespaceCommand {
+  def apply(world: WorldState): Try[ExistsResult] = {
     world.namespaces.get(namespace) match {
       case Some(ns) =>
         ns.find(path) match {
           case Some(node) =>
-            Success(ChildrenAndStatResult(node.children.keys.toVector.map(path :+ _), node.stat, this, world))
+            Success(ExistsResult(Some(node.stat), this, world))
+          case None =>
+            Success(ExistsResult(None, this, world))
+        }
+      case None =>
+        Failure(new Exception("namespace %s doesn't exist".format(namespace)))
+    }
+  }
+}
+
+case class GetNodeData(namespace: String, path: Path) extends NamespaceCommand {
+  def apply(world: WorldState): Try[NodeResult] = {
+    world.namespaces.get(namespace) match {
+      case Some(ns) =>
+        ns.find(path) match {
+          case Some(node) =>
+            Success(NodeResult(node, this, world))
           case None =>
             Failure(new InvalidPathException("path %s doesn't exist".format(path)))
+        }
+      case None =>
+        Failure(new Exception("namespace %s doesn't exist".format(namespace)))
+    }
+  }
+}
+
+case class SetNodeData(namespace: String, path: Path, data: ByteString, version: Option[Long], mtime: DateTime) extends NamespaceCommand {
+  def apply(world: WorldState): Try[NodeResult] = {
+    world.namespaces.get(namespace) match {
+      case Some(ns) =>
+        val mversion = world.version + 1
+        ns.update(path, data, version, mversion, mtime) match {
+          case Success(updated) =>
+            Success(NodeResult(updated.get(path), this, WorldState(mversion, world.namespaces + (namespace -> updated))))
+          case Failure(ex) =>
+            Failure(ex)
         }
       case None =>
         Failure(new Exception("namespace %s doesn't exist".format(namespace)))
@@ -62,12 +95,12 @@ case class GetNodeData(namespace: String, path: Path) extends NamespaceCommand {
 }
 
 case class GetNodeChildren(namespace: String, path: Path) extends NamespaceCommand {
-  def apply(world: WorldState): Try[ChildrenAndStatResult] = {
+  def apply(world: WorldState): Try[StatAndChildrenResult] = {
     world.namespaces.get(namespace) match {
       case Some(ns) =>
         ns.find(path) match {
           case Some(node) =>
-            Success(ChildrenAndStatResult(node.children.keys.toVector.map(path :+ _), node.stat, this, world))
+            Success(StatAndChildrenResult(node.stat, node.children.keys.map(path :+ _), this, world))
           case None =>
             Failure(new InvalidPathException("path %s doesn't exist".format(path)))
         }
@@ -76,8 +109,6 @@ case class GetNodeChildren(namespace: String, path: Path) extends NamespaceComma
     }
   }
 }
-
-//case class SetNodeData(path: Path, data: ByteString, version: Option[Long]) extends NamespaceOperations
 
 /**
  *
@@ -90,8 +121,7 @@ sealed trait NamespaceResult extends Result {
 /*
  * Namespace operation result classes
  */
-case class NoneResult(op: NamespaceCommand, world: WorldState) extends NamespaceResult
-case class PathResult(path: Path, op: NamespaceCommand, world: WorldState) extends NamespaceResult
-case class StatResult(stat: Stat, op: NamespaceCommand, world: WorldState) extends NamespaceResult
-case class PathAndStatResult(path: Path, stat: Stat, op: NamespaceCommand, world: WorldState) extends NamespaceResult
-case class ChildrenAndStatResult(children: Vector[Path], stat: Stat, op: NamespaceCommand, world: WorldState) extends NamespaceResult
+case class EmptyResult(op: NamespaceCommand, world: WorldState) extends NamespaceResult
+case class ExistsResult(stat: Option[Stat], op: NamespaceCommand, world: WorldState) extends NamespaceResult
+case class NodeResult(node: Node, op: NamespaceCommand, world: WorldState) extends NamespaceResult
+case class StatAndChildrenResult(stat: Stat, children: Iterable[Path], op: NamespaceCommand, world: WorldState) extends NamespaceResult

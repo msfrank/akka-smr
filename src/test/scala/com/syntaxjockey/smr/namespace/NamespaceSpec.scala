@@ -53,7 +53,7 @@ class NamespaceSpec extends WordSpec with MustMatchers {
 
     "create a new node" in {
       val ctime = DateTime.now()
-      val updated = ns.create("/foo/new", ByteString("test data"), ctime).get
+      val updated = ns.create("/foo/new", ByteString("test data"), ns.version + 1, ctime).get
       updated.version must equal(ns.version + 1)
       updated.find("/foo/new") match {
         case None =>
@@ -69,7 +69,7 @@ class NamespaceSpec extends WordSpec with MustMatchers {
 
     "return failure when attempting to create a node whose parent doesn't exist" in {
       val ctime = DateTime.now()
-      ns.create("/foo/bar/new", ByteString("test data"), ctime) match {
+      ns.create("/foo/bar/new", ByteString("test data"), ns.version + 1, ctime) match {
         case Success(_) => fail("creating node whose parent doesn't exist should return Failure")
         case Failure(ex: InvalidPathException) => // success
         case Failure(ex) => fail("node creation failed with unexpected exception: {}", ex)
@@ -78,7 +78,7 @@ class NamespaceSpec extends WordSpec with MustMatchers {
 
     "return failure when attempting to create a node which already exists" in {
       val ctime = DateTime.now()
-      ns.create("/foo", ByteString("test data"), ctime) match {
+      ns.create("/foo", ByteString("test data"), ns.version + 1, ctime) match {
         case Success(_) => fail("creating node which already exists should return Failure")
         case Failure(ex: InvalidPathException) => // success
         case Failure(ex) => fail("node creation failed with unexpected exception: {}", ex)
@@ -87,21 +87,21 @@ class NamespaceSpec extends WordSpec with MustMatchers {
 
     "delete an existing node" in {
       val mtime = DateTime.now()
-      val updated = ns.delete("/foo", None, mtime).get
+      val updated = ns.delete("/foo", None, ns.version + 1, mtime).get
       updated.version must equal(ns.version + 1)
       updated.exists("/foo") must equal(false)
     }
 
     "delete an existing node with a version specified" in {
       val mtime = DateTime.now()
-      val updated = ns.delete("/foo", Some(2), mtime).get
+      val updated = ns.delete("/foo", Some(2), ns.version + 1, mtime).get
       updated.version must equal(ns.version + 1)
       updated.exists("/foo") must equal(false)
     }
 
     "return failure when attempting to delete a node which doesn't exist" in {
       val mtime = DateTime.now()
-      ns.delete("/foo/bar/new", None, mtime) match {
+      ns.delete("/foo/bar/new", None, ns.version + 1, mtime) match {
         case Success(_) => fail("deleting node which doesn't exist should return Failure")
         case Failure(ex: InvalidPathException) => // success
         case Failure(ex) => fail("node deletion failed with unexpected exception: {}", ex)
@@ -110,7 +110,7 @@ class NamespaceSpec extends WordSpec with MustMatchers {
 
     "return failure when attempting to delete the root node" in {
       val mtime = DateTime.now()
-      ns.delete("/", None, mtime) match {
+      ns.delete("/", None, ns.version + 1, mtime) match {
         case Success(_) => fail("deleting the root node should return Failure")
         case Failure(ex: RootModification) => // success
         case Failure(ex) => fail("node deletion failed with unexpected exception: {}", ex)

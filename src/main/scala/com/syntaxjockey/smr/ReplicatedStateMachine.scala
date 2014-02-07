@@ -5,32 +5,25 @@ import akka.cluster.{Cluster, Member}
 import akka.cluster.ClusterEvent._
 import scala.concurrent.duration._
 import scala.collection.SortedSet
+import scala.util.{Random, Failure, Success}
+import java.util.concurrent.TimeUnit
 
 import com.syntaxjockey.smr.raft._
-import akka.cluster.ClusterEvent.MemberRemoved
-import akka.cluster.ClusterEvent.MemberUp
-import akka.actor.ActorIdentity
-import scala.Some
-import akka.actor.Identify
-import akka.cluster.ClusterEvent.CurrentClusterState
-import com.syntaxjockey.smr.raft.LeaderElectionEvent
-import com.syntaxjockey.smr.raft.ProcessorTransitionEvent
-import akka.cluster.ClusterEvent.UnreachableMember
-import com.syntaxjockey.smr.raft.RaftProcessor.Leader
-import scala.util.{Failure, Success}
 
 /**
  * Proxy actor for coordinating RaftProcessors in a cluster.
  */
 class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends Actor with ActorLogging {
   import ReplicatedStateMachine._
+  import com.syntaxjockey.smr.raft.RaftProcessor.Leader
   import context.dispatcher
 
   // config
-  val localProcessor = context.actorOf(RaftProcessor.props(self, self))
+  val electionTimeout = FiniteDuration(4500 + Random.nextInt(500), TimeUnit.MILLISECONDS)
+  val idleTimeout = 2000.milliseconds
+  val localProcessor = context.actorOf(RaftProcessor.props(self, self, electionTimeout, idleTimeout))
 
   // state
-  var worldState = WorldState(0, Map.empty)
   var clusterState: CurrentClusterState = CurrentClusterState(SortedSet.empty, Set.empty, Set.empty, None, Map.empty)
   var remoteProcessors: Map[Address,ActorRef] = Map.empty
   var leader: Option[ActorRef] = None
@@ -49,35 +42,35 @@ class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends 
     case ReadCurrentClusterState =>
       clusterState = Cluster(context.system).state
       clusterState.members.filter { member =>
-        !remoteProcessors.contains(member.address)
+        !remoteProcessors.contains(member.address) && member.address != self.path.address
       }.foreach { member =>
         val selection = context.actorSelection(self.path.toStringWithAddress(member.address))
         selection ! Identify(member)
       }
 
     case MemberUp(member) =>
-      log.debug("member {} is up", member)
-      if (!remoteProcessors.contains(member.address)) {
+      if (!remoteProcessors.contains(member.address) && member.address != self.path.address) {
         val selection = context.actorSelection(self.path.toStringWithAddress(member.address))
         selection ! Identify(member)
       }
 
     case ActorIdentity(member: Member, Some(ref)) =>
-      remoteProcessors = remoteProcessors + (member.address -> ref)
-      log.debug("found remote processor {}", ref)
-      if (remoteProcessors.size >= minimumProcessors) {
-        localProcessor ! StartProcessing(remoteProcessors.values.toSet)
-        log.debug("ReplicatedStateMachine is now ready")
+      if (ref != self) {
+        remoteProcessors = remoteProcessors + (member.address -> ref)
+        if (remoteProcessors.size >= minimumProcessors - 1) {
+          localProcessor ! StartProcessing(remoteProcessors.values.toSet)
+          log.debug("replicated state machine is now ready")
+        }
       }
 
     case ActorIdentity(member: Member, None) =>
       log.warning("remote processor not found on member {}", member)
 
     case UnreachableMember(member) =>
-      log.debug("member {} detected as unreachable", member)
+      log.warning("member {} detected as unreachable", member)
 
     case MemberRemoved(member, previousStatus) =>
-      log.debug("member {} has been removed (previous status was {})", member, previousStatus)
+      log.warning("member {} has been removed (previous status was {})", member, previousStatus)
 
      /* return RSM status */
     case RSMStatusQuery =>
@@ -104,7 +97,7 @@ class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends 
       log.debug("processor {} is now leader for term {}", newLeader, term)
 
     /*
-     * Command acceptance protocol:
+     * Command protocol:
      *  1. Command is received by the RSM.  if a leader is currently defined, and there are no
      *     other commands buffered, then send the command to the Processor immediately and mark
      *     the command as inflight.  Otherwise, append the command to the end of the buffer.
@@ -117,8 +110,10 @@ class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends 
         case Some(_leader) if inflight.isEmpty =>
           _leader ! command
           inflight = Some(request)
+          log.debug("submitted {}", command)
         case _ =>
           buffered = buffered :+ request
+          log.debug("buffered {}", command)
       }
 
     case CommandAccepted(logEntry) =>
@@ -126,37 +121,28 @@ class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends 
         case Some(request) =>
           accepted = accepted :+ request
           inflight = None
+          log.debug("{} was accepted")
         case None =>
-          log.error("received CommandAccepted but {} is not currently in-flight", logEntry)
+          log.error("received {} was accepted but is not currently in-flight", logEntry)
       }
       buffered.headOption match {
         case Some(request) if leader.isDefined =>
           leader.get ! request.command
           inflight = Some(request)
           buffered = buffered.tail
+          log.debug("submitted {}", request.command)
         case None => // do nothing
       }
 
-    case CommandApplied(logEntry) =>
-      val applied = accepted.head
+    case CommandApplied(logEntry, result) =>
+      val request = accepted.head
       accepted = accepted.tail
-
-    /*
-     * Command execution protocol:
-     */
-    case CommandRequest(logEntry) =>
-      val response = logEntry.command.apply(worldState) match {
-        case Success(result) =>
-          worldState = result.world
-          CommandResponse(logEntry, result)
-        case Failure(ex) =>
-          log.error("{} failed: {}", logEntry.command, ex)
-          CommandResponse(logEntry, new CommandFailed(ex, logEntry.command, worldState))
-      }
-      sender ! response
+      log.debug("notifying {} that {} returned {}", request.caller, logEntry.command, result)
+      request.caller ! result
 
     /* forward internal messages to the processor */
     case message: RaftProcessorMessage =>
+      log.debug("forwarding message {} from {} to {}", message, sender(), localProcessor)
       localProcessor.forward(message)
   }
 }

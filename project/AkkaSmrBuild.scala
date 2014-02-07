@@ -7,7 +7,6 @@ object AkkaSmrBuild extends Build {
 
   val projectVersion = "0.1"
   val akkaVersion = "2.3.0-RC2"
-  val scalazVersion = "7.0.5"
 
   lazy val akkaSmrBuild = Project(
     id = "akka-smr",

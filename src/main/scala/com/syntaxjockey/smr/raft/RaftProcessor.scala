@@ -28,6 +28,7 @@ class RaftProcessor(val executor: ActorRef,
                     val maxEntriesBatch: Int)
   extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperations with CandidateOperations with LeaderOperations {
   import RaftProcessor._
+  import SupervisorStrategy.Stop
 
   val ec = context.dispatcher
 
@@ -41,6 +42,8 @@ class RaftProcessor(val executor: ActorRef,
   var commitIndex: Int = 0
   var lastApplied: Int = 0
 
+  var world: WorldState = WorldState.void
+
   startWith(Initializing, Initializing(Vector.empty))
 
   /*
@@ -50,7 +53,7 @@ class RaftProcessor(val executor: ActorRef,
    */
   when(Initializing) {
     case Event(StartProcessing(_peers), Initializing(buffered)) =>
-      log.debug("starting processing with peers {}", _peers)
+      log.debug("starting processing with peers:\n{}", _peers.map("  " + _).mkString("\n"))
       peers = _peers
       // redeliver any buffered messages
       buffered.foreach { case (msg,_sender) => self.tell(msg, _sender) }
@@ -62,6 +65,9 @@ class RaftProcessor(val executor: ActorRef,
 
   initialize()
 
+  override val supervisorStrategy = OneForOneStrategy(maxNrOfRetries = 3, withinTimeRange = 1 minute) {
+    case ex: Exception => Stop
+  }
 }
 
 object RaftProcessor {
@@ -130,7 +136,6 @@ case class CommandRequest(logEntry: LogEntry)
 // events
 sealed trait RaftProcessorEvent
 case class CommandAccepted(logEntry: LogEntry) extends RaftProcessorEvent
-case class CommandApplied(logEntry: LogEntry) extends RaftProcessorEvent
-case class CommandResponse(logEntry: LogEntry, result: Result) extends RaftProcessorEvent
+case class CommandApplied(logEntry: LogEntry, result: Result) extends RaftProcessorEvent
 case class ProcessorTransitionEvent(prevState: ProcessorState, newState: ProcessorState) extends RaftProcessorEvent
 case class LeaderElectionEvent(leader: ActorRef, term: Int) extends RaftProcessorEvent

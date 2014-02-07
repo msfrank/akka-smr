@@ -7,8 +7,9 @@ import akka.util.Timeout
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{TimeoutException, ExecutionContext, Future}
 
-import com.syntaxjockey.smr.{Command,Result,CommandFailed}
+import com.syntaxjockey.smr.{CommandFailed, WorldState, Command, Result}
 import RaftProcessor._
+import scala.util.{Failure, Success}
 
 /*
  * "The leader accepts log entries from clients, replicates them on other servers,
@@ -36,13 +37,16 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
   var commitIndex: Int
   var lastApplied: Int
 
+  var world: WorldState
+
   when(Leader) {
 
     // synchronize any initializing peers (not syncing, no heartbeat scheduled)
     case Event(SynchronizeInitial, Leader(followerStates, commitQueue)) =>
+      log.info("performing initial synchronization from leader to peers")
       val lastEntry = logEntries.lastOption.getOrElse(InitialEntry)
       val updatedStates = followerStates.map {
-        case (peer,state) if !state.isSyncing && state.nextHeartbeat.isDefined =>
+        case (peer,state) if !state.isSyncing && state.nextHeartbeat.isEmpty =>
           val updatedState = FollowerState(peer, state.nextIndex, state.matchIndex, isSyncing = true, None)
           synchronizeFollower(updatedState) pipeTo self
           peer -> updatedState
@@ -54,7 +58,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
     case Event(command: Command, Leader(followerStates, commitQueue)) =>
       val logEntry = LogEntry(command, sender, logEntries.length, currentTerm)
       logEntries = logEntries :+ logEntry
-      log.debug("received command, appending log entry {}", logEntry)
+      log.debug("appending log entry {}", logEntry)
       val updatedStates = followerStates.map {
         case (follower,state) if !state.isSyncing =>
           state.nextHeartbeat.foreach(_.cancel())
@@ -121,16 +125,19 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
     case Event(ApplyCommitted, Leader(followerStates, commitQueue)) =>
       val logEntry = commitQueue.head
       commitIndex = logEntry.index
-      logEntry.caller ! CommandApplied(logEntry)
       log.debug("committed log entry {}", logEntry)
-      executeCommand(logEntry) pipeTo self
-      stay()
-
-    // mark the log entry as applied and pass the command result to the client
-    case Event(CommandResponse(LogEntry(_, caller, index, _), result), Leader(followerStates, commitQueue)) =>
-      log.debug("received command result {} from executor", result)
-      caller ! result
-      lastApplied = index
+      val response = logEntry.command.apply(world) match {
+        case Success(result) =>
+          world = result.world
+          CommandApplied(logEntry, result)
+        case Failure(ex) =>
+          log.error("{} failed: {}", logEntry.command, ex)
+          CommandApplied(logEntry, new CommandFailed(ex, logEntry.command, world))
+      }
+      log.debug("application of {} returns {}", logEntry.command, response.result)
+      // mark the log entry as applied and pass the command result to the caller
+      lastApplied = logEntry.index
+      logEntry.caller ! response
       // if there are more log entries in the queue, then start committing the next one
       val updatedQueue = commitQueue.tail
       if (!updatedQueue.isEmpty)
@@ -170,8 +177,9 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
 
     // a new leader has been elected
     case Event(appendEntries: AppendEntriesRPC, _) =>
+      log.debug("{} sends RPC {}", sender, appendEntries)
       if (appendEntries.term > currentTerm) {
-        log.debug("a new leader has been discovered with term {}", appendEntries.term)
+        log.info("a new leader has been discovered with term {}", appendEntries.term)
         goto(Follower) using Follower(Some(sender))
       } else {
         log.debug("ignoring spurious RPC: {}", appendEntries)
@@ -180,6 +188,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
 
     // a peer is requesting an election
     case Event(requestVote: RequestVoteRPC, _) =>
+      log.debug("{} sends RPC {}", sender, requestVote)
       if (requestVote.term > currentTerm) {
         currentTerm = requestVote.term
         goto(Follower) using Follower(None)
@@ -187,6 +196,11 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
         log.debug("ignoring spurious RPC: {}", requestVote)
         stay()
       }
+
+    // ignore results arriving after we have been declared leader
+    case Event(voteResult: RequestVoteResult, _) =>
+      log.debug("ignoring spurious RPC: {}", voteResult)
+      stay()
   }
 
   onTransition {
@@ -201,8 +215,9 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
       self ! SynchronizeInitial
 
     case transition @ _ -> Leader =>
-      monitor ! ProcessorTransitionEvent(transition._1, transition._2)
-      monitor ! LeaderElectionEvent(self, currentTerm)
+      //monitor ! ProcessorTransitionEvent(transition._1, transition._2)
+      //monitor ! LeaderElectionEvent(self, currentTerm)
+      log.error("incorrectly transitioned from {} to {}", transition._1, transition._2)
   }
 
   /**
@@ -234,8 +249,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
    * exception inside.
    */
   def sendAppendEntries(appendEntries: AppendEntriesRPC, peer: ActorRef): Future[RPCResponse] = {
-    implicit val _timeout = Timeout(idleTimeout.toMillis)
-    peer ? appendEntries map {
+    peer.ask(appendEntries)(Timeout(idleTimeout.toMillis)).map {
       case result: AppendEntriesResult if result.term > appendEntries.term =>
         RPCResponse(new RPCFailure(new LeaderTermExpired(result.term, peer)), appendEntries, peer)
       case result: AppendEntriesResult =>
@@ -262,17 +276,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
       val lastEntry = logEntries.last
       AppendEntriesRPC(currentTerm, lastEntry.index, lastEntry.term, Vector.empty, commitIndex)
     }
+    log.debug("synchronizing follower {} using {}", followerState.follower, appendEntries)
     sendAppendEntries(appendEntries, followerState.follower)
-  }
-
-  /**
-   * sends the command in the specified log entry to the executor and returns
-   * CommandResponse with the result inside.
-   */
-  def executeCommand(logEntry: LogEntry): Future[Any] = {
-    implicit val _timeout = Timeout(applyTimeout.toMillis)
-    (executor ? CommandRequest(logEntry)).recover {
-      case ex: Throwable => ExecutionFailed(logEntry, ex)
-    }
   }
 }

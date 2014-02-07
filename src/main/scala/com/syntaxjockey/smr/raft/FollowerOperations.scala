@@ -33,6 +33,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
   when(Follower) {
 
     case Event(requestVote: RequestVoteRPC, data: Follower) =>
+      log.debug("{} sends RPC {}", sender, requestVote)
       val result = if (requestVote.term > currentTerm) {
         currentTerm = requestVote.term
         val lastEntry = logEntries.last
@@ -56,6 +57,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
       stay() replying result forMax electionTimeout
 
     case Event(appendEntries: AppendEntriesRPC, Follower(leaderOption)) =>
+      log.debug("{} sends RPC {}", sender, appendEntries)
       if (appendEntries.term >= currentTerm) {
         // the current term has concluded, recognize sender as the new leader
         if (appendEntries.term > currentTerm)
