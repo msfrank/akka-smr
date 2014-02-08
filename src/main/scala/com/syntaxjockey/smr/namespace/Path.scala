@@ -2,7 +2,7 @@ package com.syntaxjockey.smr.namespace
 
 import scala.collection.IndexedSeqLike
 
-final class Path private (val segments: Array[String], val length: Int) extends IndexedSeq[String] with IndexedSeqLike[String,Path] {
+final class Path private (val segments: Array[String], val length: Int) extends IndexedSeq[String] with IndexedSeqLike[String,Path] with Serializable {
   import scala.collection.mutable
 
   override protected[this] def newBuilder: mutable.Builder[String, Path] = Path.newBuilder
