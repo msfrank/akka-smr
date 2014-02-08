@@ -109,26 +109,22 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
         peer -> FollowerState(peer, tmp.nextIndex, tmp.matchIndex, Some(appendEntries), Some(scheduledCall))
       }
       val updatedStates = followerStates + updatedState
-        // FIXME
-        // check whether any log entries can be committed
-//        val updatedQueue: Vector[LogEntry] = lastEntry match {
-//          case Some(LogPosition(lastIndex, lastTerm)) if lastIndex > state.matchIndex =>
-//            val updatedQueue = commitQueue.lastOption match {
-//              case Some(lastQueued) if lastIndex > lastQueued.index && rpc.entries.head.index <= lastQueued.index =>
-//                nextEntriesToCommit(lastQueued.index + 1, updatedStates, commitQueue)
-//              case _ =>
-//                nextEntriesToCommit(commitIndex + 1, updatedStates, commitQueue)
-//            }
-//            if (updatedQueue.length > 0)
-//              log.debug("adding {} to commit queue", updatedQueue)
-//            updatedQueue
-//          case None => Vector.empty
-//        }
-//        // apply committed entries if we are not already
-//        if (commitQueue.isEmpty && !updatedQueue.isEmpty)
-//          self ! ApplyCommitted
-//        stay() using Leader(updatedStates, commitQueue ++ updatedQueue)
-      stay() using Leader(updatedStates, commitQueue)
+      // check whether any log entries can be committed
+      val updatedQueue: Vector[LogEntry] = if (lastEntry.index > state.matchIndex) {
+        val updatedQueue = commitQueue.lastOption match {
+          case Some(lastQueued) if lastEntry.index > lastQueued.index && prevEntry.index < lastQueued.index =>
+            nextEntriesToCommit(lastQueued.index + 1, updatedStates, commitQueue)
+          case _ =>
+            nextEntriesToCommit(commitIndex + 1, updatedStates, commitQueue)
+        }
+        if (updatedQueue.length > 0)
+          log.info("adding {} to commit queue", updatedQueue)
+        updatedQueue
+      } else Vector.empty
+      // apply committed entries if we are not already
+      if (commitQueue.isEmpty && !updatedQueue.isEmpty)
+        self ! ApplyCommitted
+      stay() using Leader(updatedStates, commitQueue ++ updatedQueue)
 
     // peer did not contain entry matching prevLogIndex and prevLogTerm
     case Event(result @ AppendEntriesRejected(term, LogPosition(prevLogIndex, prevLogTerm)), Leader(followerStates, commitQueue)) =>
@@ -147,7 +143,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
     case Event(ApplyCommitted, Leader(followerStates, commitQueue)) =>
       val logEntry = commitQueue.head
       commitIndex = logEntry.index
-      log.debug("committed log entry {}", logEntry)
+      log.info("committed log entry {}", logEntry)
       val response = logEntry.command.apply(world) match {
         case Success(result) =>
           world = result.world
