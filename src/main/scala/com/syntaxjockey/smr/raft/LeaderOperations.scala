@@ -38,20 +38,6 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
 
   var world: WorldState
 
-  def appendEntriesFor(follower: FollowerState): AppendEntriesRPC = {
-    if (logEntries.length > follower.nextIndex) {
-      val numBehind = logEntries.length - follower.nextIndex
-      val until = if (numBehind < maxEntriesBatch) follower.nextIndex + numBehind else follower.nextIndex + maxEntriesBatch
-      val entries = logEntries.slice(follower.nextIndex - 1, until + 1)
-      val prevEntry = entries.head
-      val currEntries = entries.tail
-      AppendEntriesRPC(currentTerm, prevEntry.index, prevEntry.term, currEntries, commitIndex)
-    } else {
-      val lastEntry = logEntries.last
-      AppendEntriesRPC(currentTerm, lastEntry.index, lastEntry.term, Vector.empty, commitIndex)
-    }
-  }
-
   when(Leader) {
 
     // log and drop messages from unknown peers
@@ -71,6 +57,23 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
         case entry => entry
       }
       stay() using Leader(updatedStates, commitQueue)
+
+    // synchronize peers which check in after transition to leader
+    case Event(voteResult: RequestVoteResult, Leader(followerStates, commitQueue)) =>
+      if (voteResult.term == currentTerm) {
+        log.debug("RESULT {} from {}", voteResult, sender().path)
+        val lastEntry = logEntries.lastOption.getOrElse(InitialEntry)
+        val follower = sender()
+        val tmp = FollowerState(follower, lastEntry.index + 1, 0, None, None)
+        val appendEntries = appendEntriesFor(tmp)
+        follower ! appendEntries
+        val scheduledCall = context.system.scheduler.scheduleOnce(idleTimeout, self, IdleTimeout(follower))
+        val updatedState = follower -> FollowerState(follower, tmp.nextIndex, tmp.matchIndex, Some(appendEntries), Some(scheduledCall))
+        stay() using Leader(followerStates + updatedState, commitQueue)
+      } else {
+        log.debug("ignoring spurious RPC {} from {}", voteResult, sender().path)
+        stay()
+      }
 
     // when a new command comes in, add a log entry for it then replicate entry to followers
     case Event(command: Command, Leader(followerStates, commitQueue)) =>
@@ -207,10 +210,6 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
         stay()
       }
 
-    // ignore results arriving after we have been declared leader
-    case Event(voteResult: RequestVoteResult, _) =>
-      log.debug("ignoring spurious RPC {} from {}", voteResult, sender().path)
-      stay()
   }
 
   onTransition {
@@ -253,40 +252,19 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
   }
 
   /**
-   * sends an AppendEntries RPC to the specified peer and returns a Future containing
-   * the result or an exception.  if the peer returns a term that is greater than the
-   * term specified in AppendEntries.term, we return a Failure with a LeaderTermExpired
-   * exception inside.
+   * Given the specified follower state, construct an AppendEntries RPC message.
    */
-//  def sendAppendEntries(appendEntries: AppendEntriesRPC, peer: ActorRef): Future[RPCResponse] = {
-//    peer.ask(appendEntries)(Timeout(idleTimeout.toMillis)).map {
-//      case result: AppendEntriesResult if result.term > appendEntries.term =>
-//        RPCResponse(new RPCFailure(new LeaderTermExpired(result.term, peer)), appendEntries, peer)
-//      case result: AppendEntriesResult =>
-//        if (result.term < appendEntries.term)
-//          log.warning("peer returned expired term {} for AppendEntries RPC", result.term)
-//        RPCResponse(result, appendEntries, peer)
-//    } recover {
-//      case ex: Throwable => RPCResponse(new RPCFailure(ex), appendEntries, peer)
-//    }
-//  }
-
-  /**
-   *
-   */
-//  def synchronizeFollower(followerState: FollowerState): Future[RPCResponse] = {
-//    val appendEntries = if (logEntries.length > followerState.nextIndex) {
-//      val numBehind = logEntries.length - followerState.nextIndex
-//      val until = if (numBehind < maxEntriesBatch) followerState.nextIndex + numBehind else followerState.nextIndex + maxEntriesBatch
-//      val entries = logEntries.slice(followerState.nextIndex - 1, until + 1)
-//      val prevEntry = entries.head
-//      val currEntries = entries.tail
-//      AppendEntriesRPC(currentTerm, prevEntry.index, prevEntry.term, currEntries, commitIndex)
-//    } else {
-//      val lastEntry = logEntries.last
-//      AppendEntriesRPC(currentTerm, lastEntry.index, lastEntry.term, Vector.empty, commitIndex)
-//    }
-//    log.debug("synchronizing follower {} using {}", followerState.follower.path, appendEntries)
-//    sendAppendEntries(appendEntries, followerState.follower)
-//  }
+  def appendEntriesFor(follower: FollowerState): AppendEntriesRPC = {
+    if (logEntries.length > follower.nextIndex) {
+      val numBehind = logEntries.length - follower.nextIndex
+      val until = if (numBehind < maxEntriesBatch) follower.nextIndex + numBehind else follower.nextIndex + maxEntriesBatch
+      val entries = logEntries.slice(follower.nextIndex - 1, until + 1)
+      val prevEntry = entries.head
+      val currEntries = entries.tail
+      AppendEntriesRPC(currentTerm, prevEntry.index, prevEntry.term, currEntries, commitIndex)
+    } else {
+      val lastEntry = logEntries.last
+      AppendEntriesRPC(currentTerm, lastEntry.index, lastEntry.term, Vector.empty, commitIndex)
+    }
+  }
 }

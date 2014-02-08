@@ -21,7 +21,7 @@ class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends 
   // config
   val electionTimeout = FiniteDuration(4500 + Random.nextInt(500), TimeUnit.MILLISECONDS)
   val idleTimeout = 2000.milliseconds
-  val localProcessor = context.actorOf(RaftProcessor.props(self, self, electionTimeout, idleTimeout))
+  val localProcessor = context.actorOf(RaftProcessor.props(self, electionTimeout, idleTimeout))
 
   // state
   var clusterState: CurrentClusterState = CurrentClusterState(SortedSet.empty, Set.empty, Set.empty, None, Map.empty)
@@ -123,9 +123,9 @@ class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends 
         case Some(request) =>
           accepted = accepted :+ request
           inflight = None
-          log.debug("COMMAND {} was accepted")
+          log.debug("COMMAND {} was accepted", logEntry.command)
         case None =>
-          log.error("COMMAND {} was accepted but is not currently in-flight", logEntry)
+          log.error("COMMAND {} was accepted but is not currently in-flight", logEntry.command)
       }
       buffered.headOption match {
         case Some(request) =>

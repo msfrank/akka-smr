@@ -41,9 +41,9 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
 //    }
 
     "pick a leader" in {
-      val processor1 = system.actorOf(RaftProcessor.props(self, self, 1 second))
-      val processor2 = system.actorOf(RaftProcessor.props(self, self, 2 second))
-      val processor3 = system.actorOf(RaftProcessor.props(self, self, 3 second))
+      val processor1 = system.actorOf(RaftProcessor.props(self, 1 second))
+      val processor2 = system.actorOf(RaftProcessor.props(self, 2 second))
+      val processor3 = system.actorOf(RaftProcessor.props(self, 3 second))
       processor1 ! StartProcessing(Set(processor2, processor3))
       expectMsg(ProcessorTransitionEvent(Initializing, Follower))
       processor2 ! StartProcessing(Set(processor1, processor3))
@@ -55,10 +55,9 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
     }
 
     "replicate a command" in {
-      val executor = system.actorOf(Props[TestExecutor])
-      val processor1 = system.actorOf(RaftProcessor.props(executor, self, 1 second))
-      val processor2 = system.actorOf(RaftProcessor.props(executor, self, 2 second))
-      val processor3 = system.actorOf(RaftProcessor.props(executor, self, 2 second))
+      val processor1 = system.actorOf(RaftProcessor.props(self, 1 second))
+      val processor2 = system.actorOf(RaftProcessor.props(self, 2 second))
+      val processor3 = system.actorOf(RaftProcessor.props(self, 2 second))
       processor1 ! StartProcessing(Set(processor2, processor3))
       processor2 ! StartProcessing(Set(processor1, processor3))
       processor3 ! StartProcessing(Set(processor1, processor2))
@@ -72,10 +71,9 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
     }
 
     "ignore a message if it is not a Command" in {
-      val executor = system.actorOf(Props[TestExecutor])
-      val processor1 = system.actorOf(RaftProcessor.props(executor, self, 1 second))
-      val processor2 = system.actorOf(RaftProcessor.props(executor, self, 2 second))
-      val processor3 = system.actorOf(RaftProcessor.props(executor, self, 2 second))
+      val processor1 = system.actorOf(RaftProcessor.props(self, 1 second))
+      val processor2 = system.actorOf(RaftProcessor.props(self, 2 second))
+      val processor3 = system.actorOf(RaftProcessor.props(self, 2 second))
       processor1 ! StartProcessing(Set(processor2, processor3))
       processor2 ! StartProcessing(Set(processor1, processor3))
       processor3 ! StartProcessing(Set(processor1, processor2))

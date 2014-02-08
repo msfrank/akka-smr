@@ -105,8 +105,10 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
               LogPosition(lastEntry.index, lastEntry.term))
           }
         }
-        leaderOption.foreach { case leader if leader != sender() =>
-          monitor ! LeaderElectionEvent(sender(), currentTerm)
+        leaderOption match {
+          case None => monitor ! LeaderElectionEvent(sender(), currentTerm)
+          case Some(leader) if leader != sender() => monitor ! LeaderElectionEvent(sender(), currentTerm)
+          case _ => // do nothing
         }
         stay() replying result using Follower(Some(sender())) forMax electionTimeout
       }

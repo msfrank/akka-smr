@@ -22,8 +22,7 @@ case class LogPosition(index: Int, term: Int)
 /**
  * A single processor implementing the RAFT state machine replication protocol.
  */
-class RaftProcessor(val executor: ActorRef,
-                    val monitor: ActorRef,
+class RaftProcessor(val monitor: ActorRef,
                     val electionTimeout: FiniteDuration,
                     val idleTimeout: FiniteDuration,
                     val applyTimeout: FiniteDuration,
@@ -74,13 +73,12 @@ class RaftProcessor(val executor: ActorRef,
 
 object RaftProcessor {
 
-  def props(executor: ActorRef,
-            monitor: ActorRef,
+  def props(monitor: ActorRef,
             electionTimeout: FiniteDuration = 500.milliseconds,
             idleTimeout: FiniteDuration = 20.milliseconds,
             applyTimeout: FiniteDuration = 10.seconds,
             batchSize: Int = 10) = {
-    Props(classOf[RaftProcessor], executor, monitor, electionTimeout, idleTimeout, applyTimeout, batchSize)
+    Props(classOf[RaftProcessor], monitor, electionTimeout, idleTimeout, applyTimeout, batchSize)
   }
 
   // helper classes

@@ -74,9 +74,8 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       // if we have received a majority of votes, then become leader
       if (votesReceived.size > (peers.size / 2)) {
         val lastEntry = logEntries.lastOption.getOrElse(InitialEntry)
-        val followerStates = peers.map { peer =>
-          val followerState = FollowerState(peer, lastEntry.index + 1, 0, None, None)
-          peer -> followerState
+        val followerStates = votesReceived.map { follower =>
+          follower -> FollowerState(follower, lastEntry.index + 1, 0, None, None)
         }.toMap
         goto(Leader) using Leader(followerStates, Vector.empty)
       }
