@@ -17,6 +17,8 @@ sealed trait RaftProcessorMessage
  */
 case class LogEntry(command: Command, caller: ActorRef, index: Int, term: Int)
 
+case class LogPosition(index: Int, term: Int)
+
 /**
  * A single processor implementing the RAFT state machine replication protocol.
  */
@@ -82,7 +84,7 @@ object RaftProcessor {
   }
 
   // helper classes
-  case class FollowerState(follower: ActorRef, nextIndex: Int, matchIndex: Int, isSyncing: Boolean, nextHeartbeat: Option[Cancellable])
+  case class FollowerState(follower: ActorRef, nextIndex: Int, matchIndex: Int, inFlight: Option[AppendEntriesRPC], nextHeartbeat: Option[Cancellable])
 
   case object NullCommand extends Command {
     def apply(_world: WorldState): Try[Result] = Success(new Result { val world = _world })
@@ -110,7 +112,9 @@ object RaftProcessor {
   case class RequestVoteRPC(term: Int, lastLogIndex: Int, lastLogTerm: Int) extends RPC
   case class RequestVoteResult(term: Int, voteGranted: Boolean) extends RPCResult
   case class AppendEntriesRPC(term: Int, prevLogIndex: Int, prevLogTerm: Int, entries: Vector[LogEntry], leaderCommit: Int) extends RPC
-  case class AppendEntriesResult(term: Int, hasEntry: Boolean) extends RPCResult
+  case class AppendEntriesAccepted(term: Int, prevEntry: LogPosition, lastEntry: LogPosition) extends RPCResult
+  case class AppendEntriesRejected(term: Int, prevEntry: LogPosition) extends RPCResult
+  case class LeaderTermExpired(currentTerm: Int) extends RPCResult
 
   // internal messages
   case object StartFollowing extends RaftProcessorMessage
@@ -122,7 +126,6 @@ object RaftProcessor {
 
   // exceptions
   case class RPCFailure(cause: Throwable) extends Exception("RPC failed", cause) with RPCResult
-  case class LeaderTermExpired(currentTerm: Int, leader: ActorRef) extends Exception("Leader term has expired, new term is " + currentTerm)
   case class NotLeader(command: Command) extends Exception("Processor is not the current leader")
   case class ExecutionFailed(logEntry: LogEntry, cause: Throwable) extends Exception("Failed to execute log entry", cause)
 }

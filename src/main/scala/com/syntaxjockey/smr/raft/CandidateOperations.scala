@@ -18,7 +18,6 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
   implicit val ec: ExecutionContext
 
   // configuration
-  val executor: ActorRef
   val monitor: ActorRef
   val electionTimeout: FiniteDuration
 
@@ -76,7 +75,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       if (votesReceived.size > (peers.size / 2)) {
         val lastEntry = logEntries.lastOption.getOrElse(InitialEntry)
         val followerStates = peers.map { peer =>
-          val followerState = FollowerState(peer, lastEntry.index + 1, 0, isSyncing = false, None)
+          val followerState = FollowerState(peer, lastEntry.index + 1, 0, None, None)
           peer -> followerState
         }.toMap
         goto(Leader) using Leader(followerStates, Vector.empty)
@@ -91,10 +90,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
         currentTerm = appendEntries.term
         self forward appendEntries  // reinject message for processing in Follower state
         goto(Follower) using Follower(Some(sender()))
-      } else {
-        // otherwise ignore and notify sender of the current term
-        stay() replying AppendEntriesResult(currentTerm, hasEntry = false)
-      }
+      } else stay() replying LeaderTermExpired(currentTerm)
 
     case Event(command: Command, _) =>
       stay() replying RetryCommand(command)

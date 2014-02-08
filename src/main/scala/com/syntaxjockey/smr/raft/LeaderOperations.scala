@@ -20,7 +20,6 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
   implicit val ec: ExecutionContext
 
   // configuration
-  val executor: ActorRef
   val monitor: ActorRef
   val electionTimeout: FiniteDuration
   val idleTimeout: FiniteDuration
@@ -39,17 +38,36 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
 
   var world: WorldState
 
+  def appendEntriesFor(follower: FollowerState): AppendEntriesRPC = {
+    if (logEntries.length > follower.nextIndex) {
+      val numBehind = logEntries.length - follower.nextIndex
+      val until = if (numBehind < maxEntriesBatch) follower.nextIndex + numBehind else follower.nextIndex + maxEntriesBatch
+      val entries = logEntries.slice(follower.nextIndex - 1, until + 1)
+      val prevEntry = entries.head
+      val currEntries = entries.tail
+      AppendEntriesRPC(currentTerm, prevEntry.index, prevEntry.term, currEntries, commitIndex)
+    } else {
+      val lastEntry = logEntries.last
+      AppendEntriesRPC(currentTerm, lastEntry.index, lastEntry.term, Vector.empty, commitIndex)
+    }
+  }
+
   when(Leader) {
+
+    // log and drop messages from unknown peers
+//    case Event(message, Leader(followerStates, _)) if !followerStates.contains(sender()) =>
+//      log.warning("ignoring message {} from unknown peer {}", message, sender().path)
+//      stay()
 
     // synchronize any initializing peers (not syncing, no heartbeat scheduled)
     case Event(SynchronizeInitial, Leader(followerStates, commitQueue)) =>
       log.info("performing initial synchronization from leader to peers")
-      val lastEntry = logEntries.lastOption.getOrElse(InitialEntry)
       val updatedStates = followerStates.map {
-        case (peer,state) if !state.isSyncing && state.nextHeartbeat.isEmpty =>
-          val updatedState = FollowerState(peer, state.nextIndex, state.matchIndex, isSyncing = true, None)
-          synchronizeFollower(updatedState) pipeTo self
-          peer -> updatedState
+        case (follower,state) if state.inFlight.isEmpty && state.nextHeartbeat.isEmpty =>
+          val appendEntries = appendEntriesFor(state)
+          follower ! appendEntries
+          val scheduledCall = context.system.scheduler.scheduleOnce(idleTimeout, self, IdleTimeout(follower))
+          follower -> FollowerState(follower, state.nextIndex, state.matchIndex, Some(appendEntries), Some(scheduledCall))
         case entry => entry
       }
       stay() using Leader(updatedStates, commitQueue)
@@ -60,67 +78,67 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
       logEntries = logEntries :+ logEntry
       log.debug("appending log entry {}", logEntry)
       val updatedStates = followerStates.map {
-        case (follower,state) if !state.isSyncing =>
+        case (follower,state) if state.inFlight.isEmpty =>
           state.nextHeartbeat.foreach(_.cancel())
-          val updatedState = FollowerState(follower, state.nextIndex, state.matchIndex, isSyncing = true, None)
-          synchronizeFollower(state) pipeTo self
-          follower -> updatedState
+          val appendEntries = appendEntriesFor(state)
+          val scheduledCall = context.system.scheduler.scheduleOnce(idleTimeout, self, IdleTimeout(follower))
+          follower -> FollowerState(follower, state.nextIndex, state.matchIndex, Some(appendEntries), Some(scheduledCall))
         case entry => entry
       }
       stay() using Leader(followerStates ++ updatedStates, commitQueue) replying CommandAccepted(logEntry)
 
-    // record the result of log replication
-    case Event(RPCResponse(result: AppendEntriesResult, rpc: AppendEntriesRPC, peer), Leader(followerStates, commitQueue)) =>
-      log.debug("RESULT {} from {}", result, sender().path)
-      val updatedState = followerStates.get(peer) match {
-        case Some(state) =>
-          state.nextHeartbeat.foreach(_.cancel())
-          val updatedState = if (result.hasEntry) {
-            rpc.entries.lastOption match {
-              // if there are no entries (this is a heartbeat)
-              case None =>
-                // FIXME: is nextIndex, matchIndex correct in this case?
-                val scheduledCall = context.system.scheduler.scheduleOnce(idleTimeout, self, IdleTimeout(peer))
-                FollowerState(peer, state.nextIndex, state.matchIndex, isSyncing = false, Some(scheduledCall))
-              // if peer is caught up, then schedule an idle timeout
-              case Some(lastEntry) if logEntries.last.index == lastEntry.index && logEntries.last.term == lastEntry.term =>
-                val scheduledCall = context.system.scheduler.scheduleOnce(idleTimeout, self, IdleTimeout(peer))
-                FollowerState(peer, lastEntry.index + 1, lastEntry.index, isSyncing = false, Some(scheduledCall))
-              // otherwise immediately try to replicate the next log entry
-              case Some(lastEntry) =>
-                val updatedState = FollowerState(peer, lastEntry.index + 1, lastEntry.index, isSyncing = true, None)
-                synchronizeFollower(updatedState) pipeTo self
-                updatedState
-            }
-          }
-          else {
-            // peer did not contain entry matching prevLogIndex and prevLogTerm
-            val updatedState = FollowerState(peer, rpc.prevLogIndex - 1, state.matchIndex, isSyncing = true, None)
-            synchronizeFollower(updatedState) pipeTo self
-            updatedState
-          }
-          Map(peer -> updatedState)
-        // no state for peer
-        case None =>
-          Map.empty[ActorRef,FollowerState]
+    // log replication succeeded
+    case Event(result @ AppendEntriesAccepted(term, prevEntry, lastEntry), Leader(followerStates, commitQueue)) =>
+      val peer = sender()
+      log.debug("RESULT {} from {}", result, peer.path)
+      val state = followerStates(peer)
+      state.nextHeartbeat.foreach(_.cancel())
+      val updatedState = if (logEntries.last.index == lastEntry.index && logEntries.last.term == lastEntry.term) {
+        // if peer is caught up, then schedule an idle timeout
+        val scheduledCall = context.system.scheduler.scheduleOnce(idleTimeout, self, IdleTimeout(peer))
+        peer -> FollowerState(peer, lastEntry.index + 1, lastEntry.index, None, Some(scheduledCall))
+      } else {
+        // otherwise immediately try to replicate the next log entry
+        val tmp = FollowerState(peer, lastEntry.index + 1, lastEntry.index, None, None)
+        val appendEntries = appendEntriesFor(tmp)
+        peer ! appendEntries
+        val scheduledCall = context.system.scheduler.scheduleOnce(idleTimeout, self, IdleTimeout(peer))
+        peer -> FollowerState(peer, tmp.nextIndex, tmp.matchIndex, Some(appendEntries), Some(scheduledCall))
       }
-      val updatedStates = followerStates ++ updatedState
-      // check whether any log entries can be committed
-      val updatedQueue: Vector[LogEntry] = if (result.hasEntry && rpc.entries.length > 0) {
-        val updatedQueue = commitQueue.lastOption match {
-          case Some(lastQueued) if rpc.entries.last.index > lastQueued.index && rpc.entries.head.index <= lastQueued.index =>
-            nextEntriesToCommit(lastQueued.index + 1, updatedStates, commitQueue)
-          case _ =>
-            nextEntriesToCommit(commitIndex + 1, updatedStates, commitQueue)
-        }
-        if (updatedQueue.length > 0)
-          log.debug("adding {} to commit queue", updatedQueue)
-        updatedQueue
-      } else Vector.empty
-      // apply committed entries if we are not already
-      if (commitQueue.isEmpty && !updatedQueue.isEmpty)
-        self ! ApplyCommitted
-      stay() using Leader(updatedStates, commitQueue ++ updatedQueue)
+      val updatedStates = followerStates + updatedState
+        // FIXME
+        // check whether any log entries can be committed
+//        val updatedQueue: Vector[LogEntry] = lastEntry match {
+//          case Some(LogPosition(lastIndex, lastTerm)) if lastIndex > state.matchIndex =>
+//            val updatedQueue = commitQueue.lastOption match {
+//              case Some(lastQueued) if lastIndex > lastQueued.index && rpc.entries.head.index <= lastQueued.index =>
+//                nextEntriesToCommit(lastQueued.index + 1, updatedStates, commitQueue)
+//              case _ =>
+//                nextEntriesToCommit(commitIndex + 1, updatedStates, commitQueue)
+//            }
+//            if (updatedQueue.length > 0)
+//              log.debug("adding {} to commit queue", updatedQueue)
+//            updatedQueue
+//          case None => Vector.empty
+//        }
+//        // apply committed entries if we are not already
+//        if (commitQueue.isEmpty && !updatedQueue.isEmpty)
+//          self ! ApplyCommitted
+//        stay() using Leader(updatedStates, commitQueue ++ updatedQueue)
+      stay() using Leader(updatedStates, commitQueue)
+
+    // peer did not contain entry matching prevLogIndex and prevLogTerm
+    case Event(result @ AppendEntriesRejected(term, LogPosition(prevLogIndex, prevLogTerm)), Leader(followerStates, commitQueue)) =>
+      val peer = sender()
+      log.debug("RESULT {} from {}", result, peer.path)
+      val state = followerStates(peer)
+      state.nextHeartbeat.foreach(_.cancel())
+      val tmp = FollowerState(peer, prevLogIndex - 1, state.matchIndex, None, None)
+      val appendEntries = appendEntriesFor(tmp)
+      peer ! appendEntries
+      val scheduledCall = context.system.scheduler.scheduleOnce(idleTimeout, self, IdleTimeout(peer))
+      val updatedStates = followerStates + (peer -> FollowerState(peer, tmp.nextIndex, tmp.matchIndex, Some(appendEntries), Some(scheduledCall)))
+      stay() using Leader(updatedStates, commitQueue)
 
     // update the commit index and begin applying the command
     case Event(ApplyCommitted, Leader(followerStates, commitQueue)) =>
@@ -149,21 +167,10 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
     case Event(IdleTimeout(follower), Leader(followerStates, commitQueue)) =>
       val updatedState = followerStates.get(follower) match {
         case Some(state) =>
-          val updatedState = FollowerState(follower, state.nextIndex, state.matchIndex, isSyncing = true, None)
-          synchronizeFollower(updatedState) pipeTo self
-          Map(follower -> updatedState)
-        case None =>
-          Map.empty[ActorRef,FollowerState]
-      }
-      stay() using Leader(followerStates ++ updatedState, commitQueue)
-
-    // follower did not respond to AppendEntriesRPC
-    case Event(RPCResponse(RPCFailure(ex: TimeoutException), _, follower), Leader(followerStates, commitQueue)) =>
-      log.warning("follower {} is not responding", follower.path)
-      val updatedState = followerStates.get(follower) match {
-        case Some(state) =>
-          val updatedState = FollowerState(follower, state.nextIndex, state.matchIndex, isSyncing = true, None)
-          synchronizeFollower(updatedState) pipeTo self
+          val appendEntries = appendEntriesFor(state)
+          follower ! appendEntries
+          val scheduledCall = context.system.scheduler.scheduleOnce(idleTimeout, self, IdleTimeout(follower))
+          val updatedState = FollowerState(follower, state.nextIndex, state.matchIndex, Some(appendEntries), Some(scheduledCall))
           Map(follower -> updatedState)
         case None =>
           Map.empty[ActorRef,FollowerState]
@@ -171,10 +178,12 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
       stay() using Leader(followerStates ++ updatedState, commitQueue)
 
     // our term has expired, however we don't know who the new leader is yet
-    case Event(RPCResponse(RPCFailure(ex: LeaderTermExpired), _, _), _) =>
-      log.debug("leader term has expired")
-      currentTerm = ex.currentTerm
-      goto(Follower) using Follower(None)
+    case Event(expired: LeaderTermExpired, _) =>
+      if (expired.currentTerm > currentTerm) {
+        currentTerm = expired.currentTerm
+        log.debug("{} says leader term has expired, new term is {}", sender().path, currentTerm)
+        goto(Follower) using Follower(None)
+      } else stay()
 
     // a new leader has been elected
     case Event(appendEntries: AppendEntriesRPC, _) =>
@@ -249,35 +258,35 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
    * term specified in AppendEntries.term, we return a Failure with a LeaderTermExpired
    * exception inside.
    */
-  def sendAppendEntries(appendEntries: AppendEntriesRPC, peer: ActorRef): Future[RPCResponse] = {
-    peer.ask(appendEntries)(Timeout(idleTimeout.toMillis)).map {
-      case result: AppendEntriesResult if result.term > appendEntries.term =>
-        RPCResponse(new RPCFailure(new LeaderTermExpired(result.term, peer)), appendEntries, peer)
-      case result: AppendEntriesResult =>
-        if (result.term < appendEntries.term)
-          log.warning("peer returned expired term {} for AppendEntries RPC", result.term)
-        RPCResponse(result, appendEntries, peer)
-    } recover {
-      case ex: Throwable => RPCResponse(new RPCFailure(ex), appendEntries, peer)
-    }
-  }
+//  def sendAppendEntries(appendEntries: AppendEntriesRPC, peer: ActorRef): Future[RPCResponse] = {
+//    peer.ask(appendEntries)(Timeout(idleTimeout.toMillis)).map {
+//      case result: AppendEntriesResult if result.term > appendEntries.term =>
+//        RPCResponse(new RPCFailure(new LeaderTermExpired(result.term, peer)), appendEntries, peer)
+//      case result: AppendEntriesResult =>
+//        if (result.term < appendEntries.term)
+//          log.warning("peer returned expired term {} for AppendEntries RPC", result.term)
+//        RPCResponse(result, appendEntries, peer)
+//    } recover {
+//      case ex: Throwable => RPCResponse(new RPCFailure(ex), appendEntries, peer)
+//    }
+//  }
 
   /**
    *
    */
-  def synchronizeFollower(followerState: FollowerState): Future[RPCResponse] = {
-    val appendEntries = if (logEntries.length > followerState.nextIndex) {
-      val numBehind = logEntries.length - followerState.nextIndex
-      val until = if (numBehind < maxEntriesBatch) followerState.nextIndex + numBehind else followerState.nextIndex + maxEntriesBatch
-      val entries = logEntries.slice(followerState.nextIndex - 1, until + 1)
-      val prevEntry = entries.head
-      val currEntries = entries.tail
-      AppendEntriesRPC(currentTerm, prevEntry.index, prevEntry.term, currEntries, commitIndex)
-    } else {
-      val lastEntry = logEntries.last
-      AppendEntriesRPC(currentTerm, lastEntry.index, lastEntry.term, Vector.empty, commitIndex)
-    }
-    log.debug("synchronizing follower {} using {}", followerState.follower.path, appendEntries)
-    sendAppendEntries(appendEntries, followerState.follower)
-  }
+//  def synchronizeFollower(followerState: FollowerState): Future[RPCResponse] = {
+//    val appendEntries = if (logEntries.length > followerState.nextIndex) {
+//      val numBehind = logEntries.length - followerState.nextIndex
+//      val until = if (numBehind < maxEntriesBatch) followerState.nextIndex + numBehind else followerState.nextIndex + maxEntriesBatch
+//      val entries = logEntries.slice(followerState.nextIndex - 1, until + 1)
+//      val prevEntry = entries.head
+//      val currEntries = entries.tail
+//      AppendEntriesRPC(currentTerm, prevEntry.index, prevEntry.term, currEntries, commitIndex)
+//    } else {
+//      val lastEntry = logEntries.last
+//      AppendEntriesRPC(currentTerm, lastEntry.index, lastEntry.term, Vector.empty, commitIndex)
+//    }
+//    log.debug("synchronizing follower {} using {}", followerState.follower.path, appendEntries)
+//    sendAppendEntries(appendEntries, followerState.follower)
+//  }
 }

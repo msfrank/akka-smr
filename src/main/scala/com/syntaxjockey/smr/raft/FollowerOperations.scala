@@ -17,7 +17,6 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
   implicit val ec: ExecutionContext
 
   // configuration
-  val executor: ActorRef
   val monitor: ActorRef
   val electionTimeout: FiniteDuration
 
@@ -74,8 +73,8 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
         if (appendEntries.term > currentTerm)
           currentTerm = appendEntries.term
         // there is no entry defined at prevLogIndex
-        val result: AppendEntriesResult = if (!logEntries.isDefinedAt(appendEntries.prevLogIndex)) {
-          AppendEntriesResult(currentTerm, hasEntry = false)
+        val result = if (!logEntries.isDefinedAt(appendEntries.prevLogIndex)) {
+          AppendEntriesRejected(currentTerm, LogPosition(appendEntries.prevLogIndex, appendEntries.prevLogTerm))
         } else {
           val prevEntry = logEntries(appendEntries.prevLogIndex)
           // an entry exists at prevLogIndex, but it conflicts with a new one (same index but different terms)
@@ -83,7 +82,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
             // delete the existing entry and all that follow it
             log.debug("deleting log entries {}", logEntries.drop(appendEntries.prevLogIndex))
             logEntries = logEntries.take(appendEntries.prevLogIndex)
-            AppendEntriesResult(currentTerm, hasEntry = false)
+            AppendEntriesRejected(currentTerm, LogPosition(appendEntries.prevLogIndex, appendEntries.prevLogTerm))
           } else {
             // if there are any entries after prevLogIndex, then drop them
             if (logEntries.length > appendEntries.prevLogIndex + 1) {
@@ -100,7 +99,10 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
               commitIndex = math.min(appendEntries.leaderCommit, logEntries.last.index)
               log.debug("committed up to {}", commitIndex)
             }
-            AppendEntriesResult(currentTerm, hasEntry = true)
+            val lastEntry = logEntries.last
+            AppendEntriesAccepted(currentTerm,
+              LogPosition(appendEntries.prevLogIndex, appendEntries.prevLogTerm),
+              LogPosition(lastEntry.index, lastEntry.term))
           }
         }
         leaderOption.foreach { case leader if leader != sender() =>
@@ -108,7 +110,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
         }
         stay() replying result using Follower(Some(sender())) forMax electionTimeout
       }
-      else stay() replying AppendEntriesResult(currentTerm, hasEntry = false) forMax electionTimeout
+      else stay() replying LeaderTermExpired(currentTerm) forMax electionTimeout
 
     case Event(StateTimeout, follower: Follower) =>
       log.debug("received no messages for {}, election must be held", electionTimeout)
