@@ -5,6 +5,7 @@ import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.ExecutionContext
 
 import com.syntaxjockey.smr.raft.RaftProcessor._
+import com.syntaxjockey.smr.Command
 
 /*
  * "[Candidate state] is used to elect a new leader ... If a candidate wins the
@@ -34,14 +35,14 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
   when(Candidate) {
 
     case Event(rpc @ RequestVoteRPC(candidateTerm, candidateLastIndex, candidateLastTerm), _) if candidateTerm > currentTerm =>
-      log.debug("{} sends RPC {}", sender, rpc)
+      log.debug("RPC {} from {}", rpc, sender().path)
       // we are not in the current term, so withdraw our candidacy
       currentTerm = candidateTerm
       goto(Follower) using Follower(None)
 
     case Event(rpc @ RequestVoteRPC(candidateTerm, candidateLastIndex, candidateLastTerm), _) =>
-      log.debug("{} sends RPC {}", sender, rpc)
-      val candidate = sender
+      log.debug("RPC {} from {}", rpc, sender().path)
+      val candidate = sender()
       // if candidate's term is older than ours, then reject the vote and send our current term
       if (candidateTerm < currentTerm)
         stay() replying RequestVoteResult(currentTerm, voteGranted = false)
@@ -56,19 +57,19 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
           // otherwise, grant the vote
           case _ =>
             votedFor = candidate
-            log.debug("granted vote to {} for term {}", candidate, candidateTerm)
+            log.debug("granted vote to {} for term {}", candidate.path, candidateTerm)
             stay() replying RequestVoteResult(currentTerm, voteGranted = true)
         }
       }
 
     case Event(result @ RequestVoteResult(candidateTerm, voteGranted), _) if candidateTerm > currentTerm =>
-      log.debug("{} sends RESULT {}", sender, result)
+      log.debug("RESULT {} from {}", result, sender().path)
       // we are not in the current term, so withdraw our candidacy
       currentTerm = candidateTerm
       goto(Follower) using Follower(None)
 
     case Event(result @ RequestVoteResult(candidateTerm, voteGranted), Candidate(currentTally, nextElection)) =>
-      log.debug("{} sends RESULT {}", sender, result)
+      log.debug("RESULT {} from {}", result, sender().path)
       // ignore results with candidateTerm < currentTerm
       val votesReceived = if (voteGranted && candidateTerm == currentTerm) currentTally + sender else currentTally
       // if we have received a majority of votes, then become leader
@@ -84,16 +85,19 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
         stay() using Candidate(votesReceived, nextElection)
 
     case Event(appendEntries: AppendEntriesRPC, _) =>
-      log.debug("{} sends RPC {}", sender, appendEntries)
+      log.debug("RPC {} from {}", appendEntries, sender().path)
       // if we receive AppendEntries with a current or newer term, then accept sender as new leader
       if (appendEntries.term >= currentTerm) {
         currentTerm = appendEntries.term
         self forward appendEntries  // reinject message for processing in Follower state
-        goto(Follower) using Follower(Some(sender))
+        goto(Follower) using Follower(Some(sender()))
       } else {
         // otherwise ignore and notify sender of the current term
         stay() replying AppendEntriesResult(currentTerm, hasEntry = false)
       }
+
+    case Event(command: Command, _) =>
+      stay() replying RetryCommand(command)
 
     case Event(ElectionTimeout, _) =>
       log.debug("election had no result")

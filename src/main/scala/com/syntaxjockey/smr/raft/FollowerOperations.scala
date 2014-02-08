@@ -5,6 +5,7 @@ import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.ExecutionContext
 
 import com.syntaxjockey.smr.raft.RaftProcessor._
+import com.syntaxjockey.smr.Command
 
 /*
  * "Followers are passive: they issue no RPCs on their own but simply respond to RPCs
@@ -33,31 +34,41 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
   when(Follower) {
 
     case Event(requestVote: RequestVoteRPC, data: Follower) =>
-      log.debug("{} sends RPC {}", sender, requestVote)
+      log.debug("RPC {} from {}", requestVote, sender().path)
       val result = if (requestVote.term > currentTerm) {
         currentTerm = requestVote.term
         val lastEntry = logEntries.last
         // grant the vote if peer has up-to-date logs
         if (requestVote.lastLogTerm >= lastEntry.term && requestVote.lastLogIndex >= lastEntry.index) {
-          votedFor = sender
+          votedFor = sender()
           RequestVoteResult(requestVote.term, voteGranted = true)
         } else RequestVoteResult(requestVote.term, voteGranted = false)
       } else if (requestVote.term == currentTerm) {
         val lastEntry = logEntries.last
         // grant the vote if peer has up-to-date logs and we have not voted at all yet
         if (votedFor == ActorRef.noSender && requestVote.lastLogTerm >= lastEntry.term && requestVote.lastLogIndex >= lastEntry.index) {
-          votedFor = sender
+          votedFor = sender()
           RequestVoteResult(requestVote.term, voteGranted = true)
         } else RequestVoteResult(requestVote.term, voteGranted = false)
       } else RequestVoteResult(currentTerm, voteGranted = false)
       if (result.voteGranted)
-        log.debug("granting vote for term {} to {}", currentTerm, votedFor)
+        log.debug("granting vote for term {} to {}", currentTerm, votedFor.path)
       else
-        log.debug("rejecting vote for term {} from {}", currentTerm, sender)
+        log.debug("rejecting vote for term {} from {}", currentTerm, sender().path)
       stay() replying result forMax electionTimeout
 
+    case Event(command: Command, Follower(leaderOption)) =>
+      leaderOption match {
+        case Some(leader) =>
+          leader forward command
+          log.debug("forwarding {} to {}", command, leader.path)
+        case None =>
+          sender() ! RetryCommand(command)
+      }
+      stay()
+
     case Event(appendEntries: AppendEntriesRPC, Follower(leaderOption)) =>
-      log.debug("{} sends RPC {}", sender, appendEntries)
+      log.debug("RPC {} from {}", appendEntries, sender().path)
       if (appendEntries.term >= currentTerm) {
         // the current term has concluded, recognize sender as the new leader
         if (appendEntries.term > currentTerm)
@@ -92,8 +103,10 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
             AppendEntriesResult(currentTerm, hasEntry = true)
           }
         }
-        monitor ! LeaderElectionEvent(sender, currentTerm)
-        stay() replying result using Follower(Some(sender)) forMax electionTimeout
+        leaderOption.foreach { case leader if leader != sender() =>
+          monitor ! LeaderElectionEvent(sender(), currentTerm)
+        }
+        stay() replying result using Follower(Some(sender())) forMax electionTimeout
       }
       else stay() replying AppendEntriesResult(currentTerm, hasEntry = false) forMax electionTimeout
 
@@ -114,7 +127,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
       nextStateData match {
         case Follower(Some(leader)) =>
           monitor ! LeaderElectionEvent(leader, currentTerm)
-          log.debug("{} becomes the new leader", leader)
+          log.debug("{} becomes the new leader", leader.path)
         case Follower(None) =>
           log.debug("we become follower, awaiting communication from new leader")
       }
@@ -130,7 +143,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
       nextStateData match {
         case Follower(Some(leader)) =>
           monitor ! LeaderElectionEvent(leader, currentTerm)
-          log.debug("following new leader {}", leader)
+          log.debug("following new leader {}", leader.path)
         case _ => // do nothing
       }
 

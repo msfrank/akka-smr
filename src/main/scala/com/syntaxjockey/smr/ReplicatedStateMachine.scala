@@ -94,7 +94,7 @@ class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends 
         inflight = Some(request)
         buffered = buffered.tail
       }
-      log.debug("processor {} is now leader for term {}", newLeader, term)
+      log.debug("processor {} is now leader for term {}", newLeader.path, term)
 
     /*
      * Command protocol:
@@ -106,43 +106,45 @@ class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends 
      */
     case command: Command =>
       val request = Request(command, sender())
-      leader match {
-        case Some(_leader) if inflight.isEmpty =>
-          _leader ! command
+      if (inflight.isEmpty) {
+          localProcessor ! command
           inflight = Some(request)
-          log.debug("submitted {}", command)
-        case _ =>
+          log.debug("COMMAND {} submitted", command)
+      } else {
           buffered = buffered :+ request
-          log.debug("buffered {}", command)
+          log.debug("COMMAND {} buffered", command)
       }
+
+    case RetryCommand(command: Command) =>
+      log.error("command {} must be retried", command)
 
     case CommandAccepted(logEntry) =>
       inflight match {
         case Some(request) =>
           accepted = accepted :+ request
           inflight = None
-          log.debug("{} was accepted")
+          log.debug("COMMAND {} was accepted")
         case None =>
-          log.error("received {} was accepted but is not currently in-flight", logEntry)
+          log.error("COMMAND {} was accepted but is not currently in-flight", logEntry)
       }
       buffered.headOption match {
-        case Some(request) if leader.isDefined =>
-          leader.get ! request.command
+        case Some(request) =>
+          localProcessor ! request.command
           inflight = Some(request)
           buffered = buffered.tail
-          log.debug("submitted {}", request.command)
+          log.debug("COMMAND {} submitted", request.command)
         case None => // do nothing
       }
 
     case CommandApplied(logEntry, result) =>
       val request = accepted.head
       accepted = accepted.tail
-      log.debug("notifying {} that {} returned {}", request.caller, logEntry.command, result)
+      log.debug("notifying {} that {} returned {}", request.caller.path, logEntry.command, result)
       request.caller ! result
 
     /* forward internal messages to the processor */
     case message: RaftProcessorMessage =>
-      log.debug("forwarding message {} from {} to {}", message, sender(), localProcessor)
+      //log.debug("forwarding message {} from {} to {}", message, sender().path, localProcessor)
       localProcessor.forward(message)
   }
 }

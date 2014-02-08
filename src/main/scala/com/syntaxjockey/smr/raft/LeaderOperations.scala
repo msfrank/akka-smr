@@ -56,7 +56,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
 
     // when a new command comes in, add a log entry for it then replicate entry to followers
     case Event(command: Command, Leader(followerStates, commitQueue)) =>
-      val logEntry = LogEntry(command, sender, logEntries.length, currentTerm)
+      val logEntry = LogEntry(command, sender(), logEntries.length, currentTerm)
       logEntries = logEntries :+ logEntry
       log.debug("appending log entry {}", logEntry)
       val updatedStates = followerStates.map {
@@ -71,6 +71,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
 
     // record the result of log replication
     case Event(RPCResponse(result: AppendEntriesResult, rpc: AppendEntriesRPC, peer), Leader(followerStates, commitQueue)) =>
+      log.debug("RESULT {} from {}", result, sender().path)
       val updatedState = followerStates.get(peer) match {
         case Some(state) =>
           state.nextHeartbeat.foreach(_.cancel())
@@ -158,7 +159,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
 
     // follower did not respond to AppendEntriesRPC
     case Event(RPCResponse(RPCFailure(ex: TimeoutException), _, follower), Leader(followerStates, commitQueue)) =>
-      log.warning("follower {} is not responding", follower)
+      log.warning("follower {} is not responding", follower.path)
       val updatedState = followerStates.get(follower) match {
         case Some(state) =>
           val updatedState = FollowerState(follower, state.nextIndex, state.matchIndex, isSyncing = true, None)
@@ -177,29 +178,29 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
 
     // a new leader has been elected
     case Event(appendEntries: AppendEntriesRPC, _) =>
-      log.debug("{} sends RPC {}", sender, appendEntries)
+      log.debug("RPC {} from {}", appendEntries, sender().path)
       if (appendEntries.term > currentTerm) {
         log.info("a new leader has been discovered with term {}", appendEntries.term)
-        goto(Follower) using Follower(Some(sender))
+        goto(Follower) using Follower(Some(sender()))
       } else {
-        log.debug("ignoring spurious RPC: {}", appendEntries)
+        log.debug("ignoring spurious RPC {} from {}", appendEntries, sender().path)
         stay()
       }
 
     // a peer is requesting an election
     case Event(requestVote: RequestVoteRPC, _) =>
-      log.debug("{} sends RPC {}", sender, requestVote)
       if (requestVote.term > currentTerm) {
+        log.debug("RPC {} from {}", requestVote, sender().path)
         currentTerm = requestVote.term
         goto(Follower) using Follower(None)
       } else {
-        log.debug("ignoring spurious RPC: {}", requestVote)
+        log.debug("ignoring spurious RPC {} from {}", requestVote, sender().path)
         stay()
       }
 
     // ignore results arriving after we have been declared leader
     case Event(voteResult: RequestVoteResult, _) =>
-      log.debug("ignoring spurious RPC: {}", voteResult)
+      log.debug("ignoring spurious RPC {} from {}", voteResult, sender().path)
       stay()
   }
 
@@ -276,7 +277,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
       val lastEntry = logEntries.last
       AppendEntriesRPC(currentTerm, lastEntry.index, lastEntry.term, Vector.empty, commitIndex)
     }
-    log.debug("synchronizing follower {} using {}", followerState.follower, appendEntries)
+    log.debug("synchronizing follower {} using {}", followerState.follower.path, appendEntries)
     sendAppendEntries(appendEntries, followerState.follower)
   }
 }
