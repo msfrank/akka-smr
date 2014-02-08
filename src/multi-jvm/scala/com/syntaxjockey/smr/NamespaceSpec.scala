@@ -24,7 +24,7 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
 
   "A ReplicatedStateMachine cluster" must {
 
-    var rsm: Option[ActorRef] = None
+    var rsm: ActorRef = ActorRef.noSender
 
     "create a namespace" in {
       Cluster(system).subscribe(testActor, classOf[MemberUp])
@@ -32,11 +32,11 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
       Cluster(system).join(node(node1).address)
       for (_ <- 0.until(roles.size)) { expectMsgClass(classOf[MemberUp]) }
       enterBarrier("startup")
-      rsm = Some(system.actorOf(ReplicatedStateMachine.props(self, roles.size), "rsm"))
+      rsm = system.actorOf(ReplicatedStateMachine.props(self, roles.size), "rsm")
       within(30 seconds) { expectMsg(RSMReady) }
       runOn(node1) {
         within(30 seconds) {
-          rsm.get ! CreateNamespace("foo")
+          rsm ! CreateNamespace("foo")
           val result = expectMsgClass(classOf[WorldStateResult])
           result.world.namespaces.keys must contain("foo")
         }
@@ -47,7 +47,7 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
     "create a namespace node" in {
       runOn(node2) {
         within(30 seconds) {
-          rsm.get ! CreateNode("foo", "/node1", ByteString("hello, world"), DateTime.now())
+          rsm ! CreateNode("foo", "/node1", ByteString("hello, world"), DateTime.now())
           val result = expectMsgClass(classOf[NodeResult])
         }
       }
@@ -57,7 +57,7 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
     "update a namespace node" in {
       runOn(node3) {
         within(30 seconds) {
-          rsm.get ! SetNodeData("foo", "/node1", ByteString("hello, world"), None, DateTime.now())
+          rsm ! SetNodeData("foo", "/node1", ByteString("hello, world"), None, DateTime.now())
           val result = expectMsgClass(classOf[NodeResult])
         }
       }
@@ -67,7 +67,7 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
     "delete a namespace node" in {
       runOn(node4) {
         within(30 seconds) {
-          rsm.get ! DeleteNode("foo", "/node1", None, DateTime.now())
+          rsm ! DeleteNode("foo", "/node1", None, DateTime.now())
           val result = expectMsgClass(classOf[EmptyResult])
         }
       }
@@ -77,7 +77,7 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
     "delete a namespace" in {
       runOn(node5) {
         within(30 seconds) {
-          rsm.get ! DeleteNamespace("foo")
+          rsm ! DeleteNamespace("foo")
           val result = expectMsgClass(classOf[WorldStateResult])
           result.world.namespaces.keys must not contain("foo")
         }

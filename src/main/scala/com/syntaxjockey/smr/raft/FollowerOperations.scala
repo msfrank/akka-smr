@@ -5,7 +5,8 @@ import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.ExecutionContext
 
 import com.syntaxjockey.smr.raft.RaftProcessor._
-import com.syntaxjockey.smr.Command
+import com.syntaxjockey.smr.{Result, WorldState, Command}
+import scala.util.{Failure, Success}
 
 /*
  * "Followers are passive: they issue no RPCs on their own but simply respond to RPCs
@@ -29,6 +30,8 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
   var peers: Set[ActorRef]
   var commitIndex: Int
   var lastApplied: Int
+
+  var world: WorldState
 
   when(Follower) {
 
@@ -94,9 +97,16 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
               log.debug("appending log entries {}", appendEntries.entries)
               logEntries = logEntries ++ appendEntries.entries
             }
-            // update commitIndex
+            // update commitIndex and apply any outstanding commands
             if (appendEntries.leaderCommit > commitIndex) {
-              commitIndex = math.min(appendEntries.leaderCommit, logEntries.last.index)
+              val updatedIndex = math.min(appendEntries.leaderCommit, logEntries.last.index)
+              world = logEntries.slice(commitIndex + 1, updatedIndex + 1).foldLeft(world) { case (acc, LogEntry(command, _, _, _)) =>
+                command.apply(acc) match {
+                  case Success(result: Result) => result.world
+                  case Failure(ex) => acc
+                }
+              }
+              commitIndex = updatedIndex
               log.debug("committed up to {}", commitIndex)
             }
             val lastEntry = logEntries.last

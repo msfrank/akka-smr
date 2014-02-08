@@ -40,11 +40,6 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
 
   when(Leader) {
 
-    // log and drop messages from unknown peers
-//    case Event(message, Leader(followerStates, _)) if !followerStates.contains(sender()) =>
-//      log.warning("ignoring message {} from unknown peer {}", message, sender().path)
-//      stay()
-
     // synchronize any initializing peers (not syncing, no heartbeat scheduled)
     case Event(SynchronizeInitial, Leader(followerStates, commitQueue)) =>
       log.info("performing initial synchronization from leader to peers")
@@ -139,7 +134,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
       val updatedStates = followerStates + (peer -> FollowerState(peer, tmp.nextIndex, tmp.matchIndex, Some(appendEntries), Some(scheduledCall)))
       stay() using Leader(updatedStates, commitQueue)
 
-    // update the commit index and begin applying the command
+    // update the commit index and apply the command
     case Event(ApplyCommitted, Leader(followerStates, commitQueue)) =>
       val logEntry = commitQueue.head
       commitIndex = logEntry.index
