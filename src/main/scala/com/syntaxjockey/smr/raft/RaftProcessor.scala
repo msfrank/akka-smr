@@ -136,6 +136,7 @@ case class CommandRequest(logEntry: LogEntry)
 // events
 sealed trait RaftProcessorEvent
 case class CommandAccepted(logEntry: LogEntry) extends RaftProcessorEvent
+case class CommandExecuted(logEntry: LogEntry, result: Result) extends RaftProcessorEvent
 case class CommandApplied(logEntry: LogEntry, result: Result) extends RaftProcessorEvent
 case class RetryCommand(command: Command) extends RaftProcessorEvent
 case class ProcessorTransitionEvent(prevState: ProcessorState, newState: ProcessorState) extends RaftProcessorEvent

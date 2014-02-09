@@ -100,9 +100,11 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
             // update commitIndex and apply any outstanding commands
             if (appendEntries.leaderCommit > commitIndex) {
               val updatedIndex = math.min(appendEntries.leaderCommit, logEntries.last.index)
-              world = logEntries.slice(commitIndex + 1, updatedIndex + 1).foldLeft(world) { case (acc, LogEntry(command, _, _, _)) =>
-                command.apply(acc) match {
-                  case Success(WorldStateResult(updated, _)) => updated
+              world = logEntries.slice(commitIndex + 1, updatedIndex + 1).foldLeft(world) { case (acc, logEntry: LogEntry) =>
+                logEntry.command.apply(acc) match {
+                  case Success(WorldStateResult(updated, _result)) =>
+                    monitor ! CommandApplied(logEntry, _result)
+                    updated
                   case Failure(ex) => acc
                 }
               }

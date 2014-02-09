@@ -19,7 +19,7 @@ class ReplicatedStateMachine(monitor: ActorRef,
                              electionTimeout: RandomBoundedDuration,
                              idleTimeout: FiniteDuration,
                              maxEntriesBatch: Int)
-extends Actor with ActorLogging {
+extends Actor with ActorLogging with WatchOperations {
   import ReplicatedStateMachine._
   import com.syntaxjockey.smr.raft.RaftProcessor.Leader
   import context.dispatcher
@@ -113,14 +113,7 @@ extends Actor with ActorLogging {
      *     CommandAccepted.
      */
     case command: Command =>
-      val _command = command match {
-        case Watch(watched, observer) =>
-          val nspath = watched.watchPath()
-          watches = watches + (nspath -> (watches.getOrElse(nspath, Set.empty) + observer))
-          log.debug("added watch on {}", nspath)
-          watched
-        case notwatched => notwatched
-      }
+      val _command = updateWatches(command)
       val request = Request(_command, sender())
       if (inflight.isEmpty) {
         localProcessor ! _command
@@ -152,41 +145,30 @@ extends Actor with ActorLogging {
         case None => // do nothing
       }
 
-    case CommandApplied(logEntry, result) =>
+    case CommandExecuted(logEntry, result) =>
       log.debug("COMMAND {} returned {}", logEntry.command, result)
       val request = accepted.head
       accepted = accepted.tail
-      result match {
-        case mutation: MutationResult =>
-          var callerNotifications = Map.empty[NamespacePath,Notification]
-          var observerNotifications = Map.empty[ActorRef,Map[NamespacePath,Notification]]
-          val notifications = mutation.notifyPath()
-          log.debug("mutation command resulted in notification events {}", notifications)
-          notifications.foreach {
-            case notification =>
-              watches.get(notification.nspath) match {
-                case Some(watchers) =>
-                  watches = watches - notification.nspath
-                  if (watchers.contains(request.caller))
-                    callerNotifications = callerNotifications + (notification.nspath -> notification)
-                  (watchers - request.caller).foreach { observer =>
-                    observerNotifications = observerNotifications + (observer -> (observerNotifications.getOrElse(observer, Map.empty) + (notification.nspath -> notification)))
-                  }
-                case None => // do nothing
-              }
-          }
-          // respond to the caller with the command result and any outstanding notifications
-          if (!callerNotifications.isEmpty)
-            request.caller ! NotificationResult(result, NotificationMap(callerNotifications))
-          else
-            request.caller ! result
-          // signal any outstanding watches
-          observerNotifications.foreach { case (observer, _notifications) =>
-            log.debug("notifying {} about mutation events {}", observer.path, _notifications)
-            observer ! NotificationMap(_notifications)
-          }
-        case _ =>
+      val notifications = notifyWatches(result)
+      // respond to the caller with the command result and any outstanding notifications
+      notifications.get(request.caller) match {
+        case Some(callerNotifications) =>
+          request.caller ! NotificationResult(result, NotificationMap(callerNotifications))
+        case None =>
           request.caller ! result
+      }
+      // signal any outstanding watches
+      (notifications - request.caller) foreach { case (observer, observerNotifications) =>
+        log.debug("command executed: notifying {} about mutation events {}", observer.path, observerNotifications)
+        observer ! NotificationMap(observerNotifications)
+      }
+
+    case CommandApplied(logEntry, result) =>
+      val notifications = notifyWatches(result)
+      // signal any outstanding watches
+      notifications foreach { case (observer, observerNotifications) =>
+        log.debug("command applied: notifying {} about mutation events {}", observer.path, observerNotifications)
+        observer ! NotificationMap(observerNotifications)
       }
 
     /* forward internal messages to the processor */

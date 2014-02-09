@@ -18,57 +18,16 @@ trait Command {
 }
 
 /**
- *
- */
-trait WatchableCommand extends Command {
-  def watchPath(): NamespacePath
-}
-
-/**
- *
- */
-case class Watch(command: WatchableCommand, observer: ActorRef) extends Command {
-  def apply(world: WorldState): Try[WorldStateResult] = command.apply(world)
-}
-
-/**
- *
- */
-case class Notification(nspath: NamespacePath, event: Notification.NotificationEvent)
-
-object Notification {
-  sealed trait NotificationEvent
-  case object NodeCreatedEvent extends NotificationEvent
-  case object NodeChildrenChangedEvent extends NotificationEvent
-  case object NodeDataChangedEvent extends NotificationEvent
-  case object NodeDeletedEvent extends NotificationEvent
-}
-/**
  * marker trait for an operation result.
  */
 trait Result
 
-
-trait MutationResult extends Result {
-  def notifyPath(): Vector[Notification]
-}
-
 /**
- *
+ * A failure result indicating the specified command failed.
  */
 class CommandFailed(cause: Throwable, val command: Command) extends Exception("Command failed", cause) with Result
 
 /**
- *
- */
-case class NotificationMap(notifications: Map[NamespacePath,Notification])
-
-/**
- *
- */
-case class NotificationResult(result: Result, notifications: NotificationMap) extends Result
-
-/**
- *
+ * Wraps the result of a command along with the transformed world state.
  */
 case class WorldStateResult(world: WorldState, result: Result)

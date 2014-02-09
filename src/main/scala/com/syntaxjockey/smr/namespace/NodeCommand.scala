@@ -127,18 +127,18 @@ case class ExistsResult(stat: Option[Stat], op: NodeExists) extends NodeResult
 case class GetNodeChildrenResult(stat: Stat, children: Iterable[Path], op: GetNodeChildren) extends NodeResult
 case class GetNodeDataResult(stat: Stat, data: ByteString, op: GetNodeData) extends NodeResult
 
-case class CreateNodeResult(path: Path, op: CreateNode) extends NodeResult with MutationResult {
+case class CreateNodeResult(path: Path, op: CreateNode) extends NodeResult with WatchResult {
   def notifyPath() = Vector(
     Notification(NamespacePath(op.namespace, op.path.init), Notification.NodeChildrenChangedEvent),
     Notification(NamespacePath(op.namespace, op.path), Notification.NodeCreatedEvent)
   )
 }
 
-case class SetNodeDataResult(stat: Stat, op: SetNodeData) extends NodeResult with MutationResult {
+case class SetNodeDataResult(stat: Stat, op: SetNodeData) extends NodeResult with WatchResult {
   def notifyPath() = Vector(Notification(NamespacePath(op.namespace, op.path), Notification.NodeDataChangedEvent))
 }
 
-case class DeleteNodeResult(path: Path, op: DeleteNode) extends NodeResult with MutationResult {
+case class DeleteNodeResult(path: Path, op: DeleteNode) extends NodeResult with WatchResult {
   def notifyPath() = Vector(
     Notification(NamespacePath(op.namespace, op.path.init), Notification.NodeChildrenChangedEvent),
     Notification(NamespacePath(op.namespace, op.path), Notification.NodeDeletedEvent)

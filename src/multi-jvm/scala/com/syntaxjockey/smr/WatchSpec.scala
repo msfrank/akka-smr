@@ -36,7 +36,7 @@ class WatchSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender
       expectMsgClass(classOf[CurrentClusterState])
       Cluster(system).join(node(node1).address)
       for (_ <- 0.until(roles.size)) { expectMsgClass(classOf[MemberUp]) }
-      enterBarrier("startup")
+      enterBarrier("joined-cluster")
       rsm = system.actorOf(ReplicatedStateMachine.props(self, roles.size, electionTimeout, idleTimeout, maxEntriesBatch), "rsm")
       within(30 seconds) { expectMsg(RSMReady) }
       runOn(node1) {

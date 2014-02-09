@@ -138,10 +138,10 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
       val response = logEntry.command.apply(world) match {
         case Success(WorldStateResult(updated, result)) =>
           world = updated
-          CommandApplied(logEntry, result)
+          CommandExecuted(logEntry, result)
         case Failure(ex) =>
           log.error("{} failed: {}", logEntry.command, ex)
-          CommandApplied(logEntry, new CommandFailed(ex, logEntry.command))
+          CommandExecuted(logEntry, new CommandFailed(ex, logEntry.command))
       }
       log.debug("application of {} returns {}", logEntry.command, response.result)
       // mark the log entry as applied and pass the command result to the caller
