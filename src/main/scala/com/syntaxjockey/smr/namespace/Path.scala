@@ -1,6 +1,7 @@
 package com.syntaxjockey.smr.namespace
 
 import scala.collection.IndexedSeqLike
+import java.net.URI
 
 final class Path private (val segments: Array[String], val length: Int) extends IndexedSeq[String] with IndexedSeqLike[String,Path] with Serializable {
   import scala.collection.mutable
@@ -55,8 +56,11 @@ object Path {
   val root: Path = new Path(new Array(0), 0)
 }
 
+case class NamespacePath(namespace: String, path: Path)
+
 object PathConversions {
   implicit def string2Path(string: String): Path = Path(string)
   implicit def seq2Path(seq: Seq[String]): Path = Path(seq)
+  implicit def uri2NamespacePath(uri: URI): NamespacePath = NamespacePath(uri.getHost, Path(uri.getPath))
 }
 

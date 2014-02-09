@@ -5,7 +5,7 @@ import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.ExecutionContext
 
 import com.syntaxjockey.smr.raft.RaftProcessor._
-import com.syntaxjockey.smr.{Result, WorldState, Command}
+import com.syntaxjockey.smr.{WorldStateResult, Result, WorldState, Command}
 import scala.util.{Failure, Success}
 
 /*
@@ -102,7 +102,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
               val updatedIndex = math.min(appendEntries.leaderCommit, logEntries.last.index)
               world = logEntries.slice(commitIndex + 1, updatedIndex + 1).foldLeft(world) { case (acc, LogEntry(command, _, _, _)) =>
                 command.apply(acc) match {
-                  case Success(result: Result) => result.world
+                  case Success(WorldStateResult(updated, _)) => updated
                   case Failure(ex) => acc
                 }
               }

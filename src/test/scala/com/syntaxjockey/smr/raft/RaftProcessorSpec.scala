@@ -7,7 +7,7 @@ import akka.actor.{ActorLogging, Props, Actor, ActorSystem}
 import akka.testkit.{ImplicitSender, TestKit}
 import com.typesafe.config.ConfigFactory
 import scala.concurrent.duration._
-import com.syntaxjockey.smr.WorldState
+import com.syntaxjockey.smr.{WorldStateResult, WorldState}
 import scala.util.Success
 
 class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpecLike with MustMatchers with BeforeAndAfterAll {
@@ -104,6 +104,6 @@ class TestExecutor extends Actor with ActorLogging {
 
 object TestExecutor {
   import com.syntaxjockey.smr.{Command,Result}
-  case class TestCommand(lsn: Int) extends Command { def apply(world: WorldState) = Success(TestResult(lsn, world)) }
-  case class TestResult(lsn: Int, world: WorldState) extends Result
+  case class TestCommand(lsn: Int) extends Command { def apply(world: WorldState) = Success(WorldStateResult(world, TestResult(lsn))) }
+  case class TestResult(lsn: Int) extends Result
 }

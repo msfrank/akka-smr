@@ -48,7 +48,7 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
       runOn(node2) {
         within(30 seconds) {
           rsm ! CreateNode("foo", "/node1", ByteString("hello, world"), DateTime.now())
-          val result = expectMsgClass(classOf[NodeResult])
+          val result = expectMsgClass(classOf[WorldStateResult])
         }
       }
       enterBarrier("finished-2")
@@ -58,7 +58,7 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
       runOn(node3) {
         within(30 seconds) {
           rsm ! SetNodeData("foo", "/node1", ByteString("hello, world"), None, DateTime.now())
-          val result = expectMsgClass(classOf[NodeResult])
+          val result = expectMsgClass(classOf[WorldStateResult])
         }
       }
       enterBarrier("finished-3")
@@ -68,7 +68,7 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
       runOn(node4) {
         within(30 seconds) {
           rsm ! DeleteNode("foo", "/node1", None, DateTime.now())
-          val result = expectMsgClass(classOf[EmptyResult])
+          val result = expectMsgClass(classOf[WorldStateResult])
         }
       }
       enterBarrier("finished-4")

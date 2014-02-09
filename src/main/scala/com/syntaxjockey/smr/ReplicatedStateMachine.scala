@@ -9,6 +9,7 @@ import scala.util.{Random, Failure, Success}
 import java.util.concurrent.TimeUnit
 
 import com.syntaxjockey.smr.raft._
+import com.syntaxjockey.smr.namespace.{NamespacePath, Path}
 
 /**
  * Proxy actor for coordinating RaftProcessors in a cluster.
@@ -30,6 +31,7 @@ class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends 
   var inflight: Option[Request] = None
   var buffered: Vector[Request] = Vector.empty
   var accepted: Vector[Request] = Vector.empty
+  var watches: Map[NamespacePath,Set[ActorRef]] = Map.empty
 
   // subscribe to cluster membership events
   Cluster(context.system).subscribe(self, InitialStateAsEvents, classOf[MemberEvent])
@@ -39,6 +41,9 @@ class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends 
 
   def receive = {
 
+    /*
+     * Processor discovery protocol:
+     */
     case ReadCurrentClusterState =>
       clusterState = Cluster(context.system).state
       clusterState.members.filter { member =>
@@ -105,14 +110,22 @@ class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends 
      *     CommandAccepted.
      */
     case command: Command =>
-      val request = Request(command, sender())
+      val _command = command match {
+        case Watch(watched, observer) =>
+          val nspath = watched.watchPath()
+          watches = watches + (nspath -> (watches.getOrElse(nspath, Set.empty) + observer))
+          log.debug("added watch on {}", nspath)
+          watched
+        case notwatched => notwatched
+      }
+      val request = Request(_command, sender())
       if (inflight.isEmpty) {
-          localProcessor ! command
-          inflight = Some(request)
-          log.debug("COMMAND {} submitted", command)
+        localProcessor ! _command
+        inflight = Some(request)
+        log.debug("COMMAND {} submitted", _command)
       } else {
-          buffered = buffered :+ request
-          log.debug("COMMAND {} buffered", command)
+        buffered = buffered :+ request
+        log.debug("COMMAND {} buffered", _command)
       }
 
     case RetryCommand(command: Command) =>
@@ -137,10 +150,36 @@ class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends 
       }
 
     case CommandApplied(logEntry, result) =>
+      log.debug("COMMAND {} returned {}", logEntry.command, result)
       val request = accepted.head
       accepted = accepted.tail
-      log.debug("notifying {} that {} returned {}", request.caller.path, logEntry.command, result)
-      request.caller ! result
+      result match {
+        case mutation: MutationResult =>
+          var callerNotifications = Map.empty[NamespacePath,Notification]
+          var observerNotifications = Map.empty[ActorRef,Map[NamespacePath,Notification]]
+          mutation.notifyPath().foreach {
+            case notification =>
+              watches.get(notification.nspath) match {
+                case Some(watchers) =>
+                  watches = watches - notification.nspath
+                  if (watchers.contains(request.caller))
+                    callerNotifications = callerNotifications + (notification.nspath -> notification)
+                  (watchers - request.caller).foreach { observer =>
+                    observerNotifications = observerNotifications + (observer -> (observerNotifications.getOrElse(observer, Map.empty) + (notification.nspath -> notification)))
+                  }
+                case None => // do nothing
+              }
+          }
+          // respond to the caller with the command result and any outstanding notifications
+          if (!callerNotifications.isEmpty)
+            request.caller ! NotificationResult(result, NotificationMap(callerNotifications))
+          else
+            request.caller ! result
+          // signal any outstanding watches
+          observerNotifications.foreach { case (observer, notifications) => observer ! NotificationMap(notifications) }
+        case _ =>
+          request.caller ! result
+      }
 
     /* forward internal messages to the processor */
     case message: RaftProcessorMessage =>

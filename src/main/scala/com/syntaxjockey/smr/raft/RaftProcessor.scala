@@ -4,7 +4,7 @@ import akka.actor._
 import scala.concurrent.duration._
 
 import com.syntaxjockey.smr.raft.RaftProcessor.{ProcessorState, ProcessorData}
-import com.syntaxjockey.smr.{WorldState, Result, Command}
+import com.syntaxjockey.smr.{WorldStateResult, WorldState, Result, Command}
 import scala.util.{Success, Try}
 
 /**
@@ -85,8 +85,9 @@ object RaftProcessor {
   case class FollowerState(follower: ActorRef, nextIndex: Int, matchIndex: Int, inFlight: Option[AppendEntriesRPC], nextHeartbeat: Option[Cancellable])
 
   case object NullCommand extends Command {
-    def apply(_world: WorldState): Try[Result] = Success(new Result { val world = _world })
+    def apply(world: WorldState): Try[WorldStateResult] = Success(WorldStateResult(world, new Result {}))
   }
+
   val InitialEntry = LogEntry(NullCommand, ActorRef.noSender, 0, 0)
 
   // FSM state

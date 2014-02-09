@@ -15,22 +15,10 @@ object WorldState {
   val void = WorldState(0, Map.empty)
 }
 
-sealed trait WorldStateCommand extends Command
-
-case object GetWorldState extends WorldStateCommand {
-  def apply(world: WorldState): Try[WorldStateResult] = Success(WorldStateResult(this, world))
+case object GetWorldState extends Command {
+  def apply(world: WorldState): Try[WorldStateResult] = Success(WorldStateResult(world, GetWorldStateResult(world)))
 }
 
-case class CreateNamespace(name: String) extends WorldStateCommand {
-  def apply(world: WorldState): Try[WorldStateResult] = if (!world.namespaces.contains(name)) {
-    Success(WorldStateResult(this, WorldState(world.version + 1, world.namespaces + (name -> Namespace(name)))))
-  } else Failure(new Exception("namespace exists"))
-}
+case class GetWorldStateResult(world: WorldState) extends Result
 
-case class DeleteNamespace(name: String) extends WorldStateCommand {
-  def apply(world: WorldState): Try[WorldStateResult] = if (world.namespaces.contains(name)) {
-    Success(WorldStateResult(this, WorldState(world.version + 1, world.namespaces - name)))
-  } else Failure(new Exception("namespace doesn't exist"))
-}
 
-case class WorldStateResult(op: WorldStateCommand, world: WorldState) extends Result

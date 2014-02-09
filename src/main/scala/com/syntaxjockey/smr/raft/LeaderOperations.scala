@@ -1,15 +1,12 @@
 package com.syntaxjockey.smr.raft
 
 import akka.actor.{ActorRef, LoggingFSM, Actor}
-import akka.pattern.ask
-import akka.pattern.pipe
-import akka.util.Timeout
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{TimeoutException, ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
+import scala.util.{Success,Failure}
 
-import com.syntaxjockey.smr.{CommandFailed, WorldState, Command, Result}
+import com.syntaxjockey.smr._
 import RaftProcessor._
-import scala.util.{Failure, Success}
 
 /*
  * "The leader accepts log entries from clients, replicates them on other servers,
@@ -140,12 +137,12 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
       commitIndex = logEntry.index
       log.info("committed log entry {}", logEntry)
       val response = logEntry.command.apply(world) match {
-        case Success(result) =>
-          world = result.world
+        case Success(WorldStateResult(updated, result)) =>
+          world = updated
           CommandApplied(logEntry, result)
         case Failure(ex) =>
           log.error("{} failed: {}", logEntry.command, ex)
-          CommandApplied(logEntry, new CommandFailed(ex, logEntry.command, world))
+          CommandApplied(logEntry, new CommandFailed(ex, logEntry.command))
       }
       log.debug("application of {} returns {}", logEntry.command, response.result)
       // mark the log entry as applied and pass the command result to the caller

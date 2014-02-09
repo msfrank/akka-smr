@@ -8,4 +8,6 @@ class InvalidPathException(message: String) extends NamespaceException(message)
 
 class RootModification() extends NamespaceException("Cannot modify /")
 
-class NamespaceOperationFailed(message: String) extends NamespaceException(message)
+class NamespaceExists(namespace: String) extends NamespaceException("Namespace '%s' already exists".format(namespace))
+
+class NamespaceAbsent(namespace: String) extends NamespaceException("Namespace '%s' doesn't exist".format(namespace))
