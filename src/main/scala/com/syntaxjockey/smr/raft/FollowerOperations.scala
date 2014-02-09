@@ -19,7 +19,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
 
   // configuration
   val monitor: ActorRef
-  val electionTimeout: FiniteDuration
+  val electionTimeout: RandomBoundedDuration
 
   // persistent server state
   var currentTerm: Int
@@ -57,7 +57,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
         log.debug("granting vote for term {} to {}", currentTerm, votedFor.path)
       else
         log.debug("rejecting vote for term {} from {}", currentTerm, sender().path)
-      stay() replying result forMax electionTimeout
+      stay() replying result forMax electionTimeout.nextDuration
 
     case Event(command: Command, Follower(leaderOption)) =>
       leaderOption match {

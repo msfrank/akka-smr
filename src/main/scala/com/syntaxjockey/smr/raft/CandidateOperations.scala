@@ -19,7 +19,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
 
   // configuration
   val monitor: ActorRef
-  val electionTimeout: FiniteDuration
+  val electionTimeout: RandomBoundedDuration
 
   // persistent server state
   var currentTerm: Int
@@ -97,7 +97,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
     case Event(ElectionTimeout, _) =>
       log.debug("election had no result")
       // FIXME: randomize the election timeout
-      val scheduledCall = context.system.scheduler.scheduleOnce(electionTimeout, self, ElectionTimeout)
+      val scheduledCall = context.system.scheduler.scheduleOnce(electionTimeout.nextDuration, self, ElectionTimeout)
       goto(Candidate) using Candidate(Set.empty, scheduledCall)
   }
 

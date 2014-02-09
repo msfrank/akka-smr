@@ -18,9 +18,8 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
 
   // configuration
   val monitor: ActorRef
-  val electionTimeout: FiniteDuration
+  val electionTimeout: RandomBoundedDuration
   val idleTimeout: FiniteDuration
-  val applyTimeout: FiniteDuration
   val maxEntriesBatch: Int
 
   // persistent server state

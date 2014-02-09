@@ -9,6 +9,7 @@ import org.joda.time.DateTime
 import scala.concurrent.duration._
 
 import com.syntaxjockey.smr.namespace._
+import com.syntaxjockey.smr.raft.RandomBoundedDuration
 
 class NamespaceSpecMultiJvmNode1 extends NamespaceSpec
 class NamespaceSpecMultiJvmNode2 extends NamespaceSpec
@@ -24,6 +25,9 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
 
   "A ReplicatedStateMachine cluster" must {
 
+    val electionTimeout = RandomBoundedDuration(4500 milliseconds, 5000 milliseconds)
+    val idleTimeout = 2 seconds
+    val maxEntriesBatch = 10
     var rsm: ActorRef = ActorRef.noSender
 
     "create a namespace" in {
@@ -33,7 +37,7 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
       Cluster(system).join(node(node1).address)
       for (_ <- 0.until(roles.size)) { expectMsgClass(classOf[MemberUp]) }
       enterBarrier("startup")
-      rsm = system.actorOf(ReplicatedStateMachine.props(self, roles.size), "rsm")
+      rsm = system.actorOf(ReplicatedStateMachine.props(self, roles.size, electionTimeout, idleTimeout, maxEntriesBatch), "rsm")
       within(30 seconds) { expectMsg(RSMReady) }
       runOn(node1) {
         within(30 seconds) {

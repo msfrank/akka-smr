@@ -14,15 +14,18 @@ import com.syntaxjockey.smr.namespace.{NamespacePath, Path}
 /**
  * Proxy actor for coordinating RaftProcessors in a cluster.
  */
-class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends Actor with ActorLogging {
+class ReplicatedStateMachine(monitor: ActorRef,
+                             minimumProcessors: Int,
+                             electionTimeout: RandomBoundedDuration,
+                             idleTimeout: FiniteDuration,
+                             maxEntriesBatch: Int)
+extends Actor with ActorLogging {
   import ReplicatedStateMachine._
   import com.syntaxjockey.smr.raft.RaftProcessor.Leader
   import context.dispatcher
 
   // config
-  val electionTimeout = FiniteDuration(4500 + Random.nextInt(500), TimeUnit.MILLISECONDS)
-  val idleTimeout = 2000.milliseconds
-  val localProcessor = context.actorOf(RaftProcessor.props(self, electionTimeout, idleTimeout))
+  val localProcessor = context.actorOf(RaftProcessor.props(self, electionTimeout, idleTimeout, maxEntriesBatch))
 
   // state
   var clusterState: CurrentClusterState = CurrentClusterState(SortedSet.empty, Set.empty, Set.empty, None, Map.empty)
@@ -189,7 +192,13 @@ class ReplicatedStateMachine(monitor: ActorRef, minimumProcessors: Int) extends 
 }
 
 object ReplicatedStateMachine {
-  def props(monitor: ActorRef, minimumProcessors: Int) = Props(classOf[ReplicatedStateMachine], monitor, minimumProcessors)
+  def props(monitor: ActorRef,
+            minimumProcessors: Int,
+            electionTimeout: RandomBoundedDuration,
+            idleTimeout: FiniteDuration,
+            maxEntriesBatch: Int) = {
+    Props(classOf[ReplicatedStateMachine], monitor, minimumProcessors, electionTimeout, idleTimeout, maxEntriesBatch)
+  }
 
   case class Request(command: Command, caller: ActorRef)
   case object ReadCurrentClusterState

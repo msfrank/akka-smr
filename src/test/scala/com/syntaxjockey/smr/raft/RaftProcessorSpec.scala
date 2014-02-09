@@ -40,10 +40,13 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
 //      ref.stateName.isInstanceOf[Candidate.type] should === (true)
 //    }
 
+    val idleTimeout = 2 seconds
+    val maxEntriesBatch = 10
+
     "pick a leader" in {
-      val processor1 = system.actorOf(RaftProcessor.props(self, 1 second))
-      val processor2 = system.actorOf(RaftProcessor.props(self, 2 second))
-      val processor3 = system.actorOf(RaftProcessor.props(self, 3 second))
+      val processor1 = system.actorOf(RaftProcessor.props(self, RandomBoundedDuration(1 second, 1 second), idleTimeout, maxEntriesBatch))
+      val processor2 = system.actorOf(RaftProcessor.props(self, RandomBoundedDuration(2 seconds, 2 seconds), idleTimeout, maxEntriesBatch))
+      val processor3 = system.actorOf(RaftProcessor.props(self, RandomBoundedDuration(3 seconds, 3 seconds), idleTimeout, maxEntriesBatch))
       processor1 ! StartProcessing(Set(processor2, processor3))
       expectMsg(ProcessorTransitionEvent(Initializing, Follower))
       processor2 ! StartProcessing(Set(processor1, processor3))
@@ -55,9 +58,9 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
     }
 
     "replicate a command" in {
-      val processor1 = system.actorOf(RaftProcessor.props(self, 1 second))
-      val processor2 = system.actorOf(RaftProcessor.props(self, 2 second))
-      val processor3 = system.actorOf(RaftProcessor.props(self, 2 second))
+      val processor1 = system.actorOf(RaftProcessor.props(self, RandomBoundedDuration(1 second, 1 second), idleTimeout, maxEntriesBatch))
+      val processor2 = system.actorOf(RaftProcessor.props(self, RandomBoundedDuration(2 seconds, 2 seconds), idleTimeout, maxEntriesBatch))
+      val processor3 = system.actorOf(RaftProcessor.props(self, RandomBoundedDuration(2 seconds, 2 seconds), idleTimeout, maxEntriesBatch))
       processor1 ! StartProcessing(Set(processor2, processor3))
       processor2 ! StartProcessing(Set(processor1, processor3))
       processor3 ! StartProcessing(Set(processor1, processor2))
@@ -71,9 +74,9 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
     }
 
     "ignore a message if it is not a Command" in {
-      val processor1 = system.actorOf(RaftProcessor.props(self, 1 second))
-      val processor2 = system.actorOf(RaftProcessor.props(self, 2 second))
-      val processor3 = system.actorOf(RaftProcessor.props(self, 2 second))
+      val processor1 = system.actorOf(RaftProcessor.props(self, RandomBoundedDuration(1 second, 1 second), idleTimeout, maxEntriesBatch))
+      val processor2 = system.actorOf(RaftProcessor.props(self, RandomBoundedDuration(2 seconds, 2 seconds), idleTimeout, maxEntriesBatch))
+      val processor3 = system.actorOf(RaftProcessor.props(self, RandomBoundedDuration(2 seconds, 2 seconds), idleTimeout, maxEntriesBatch))
       processor1 ! StartProcessing(Set(processor2, processor3))
       processor2 ! StartProcessing(Set(processor1, processor3))
       processor3 ! StartProcessing(Set(processor1, processor2))

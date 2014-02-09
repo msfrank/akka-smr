@@ -23,11 +23,10 @@ case class LogPosition(index: Int, term: Int)
  * A single processor implementing the RAFT state machine replication protocol.
  */
 class RaftProcessor(val monitor: ActorRef,
-                    val electionTimeout: FiniteDuration,
+                    val electionTimeout: RandomBoundedDuration,
                     val idleTimeout: FiniteDuration,
-                    val applyTimeout: FiniteDuration,
                     val maxEntriesBatch: Int)
-  extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperations with CandidateOperations with LeaderOperations {
+extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperations with CandidateOperations with LeaderOperations {
   import RaftProcessor._
   import SupervisorStrategy.Stop
 
@@ -74,11 +73,10 @@ class RaftProcessor(val monitor: ActorRef,
 object RaftProcessor {
 
   def props(monitor: ActorRef,
-            electionTimeout: FiniteDuration = 500.milliseconds,
-            idleTimeout: FiniteDuration = 20.milliseconds,
-            applyTimeout: FiniteDuration = 10.seconds,
-            batchSize: Int = 10) = {
-    Props(classOf[RaftProcessor], monitor, electionTimeout, idleTimeout, applyTimeout, batchSize)
+            electionTimeout: RandomBoundedDuration,
+            idleTimeout: FiniteDuration,
+            maxEntriesBatch: Int) = {
+    Props(classOf[RaftProcessor], monitor, electionTimeout, idleTimeout, maxEntriesBatch)
   }
 
   // helper classes
