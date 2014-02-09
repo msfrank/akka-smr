@@ -27,6 +27,7 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
     var rsm: ActorRef = ActorRef.noSender
 
     "create a namespace" in {
+      enterBarrier("starting-1")
       Cluster(system).subscribe(testActor, classOf[MemberUp])
       expectMsgClass(classOf[CurrentClusterState])
       Cluster(system).join(node(node1).address)
@@ -37,49 +38,55 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
       runOn(node1) {
         within(30 seconds) {
           rsm ! CreateNamespace("foo")
-          val result = expectMsgClass(classOf[WorldStateResult])
-          result.world.namespaces.keys must contain("foo")
+          val result = expectMsgClass(classOf[CreateNamespaceResult])
+          result.name must be("foo")
         }
       }
       enterBarrier("finished-1")
     }
 
     "create a namespace node" in {
+      enterBarrier("starting-2")
       runOn(node2) {
         within(30 seconds) {
           rsm ! CreateNode("foo", "/node1", ByteString("hello, world"), DateTime.now())
-          val result = expectMsgClass(classOf[WorldStateResult])
+          val result = expectMsgClass(classOf[CreateNodeResult])
+          result.path.segments must be === Path("/node1").segments
         }
       }
       enterBarrier("finished-2")
     }
 
     "update a namespace node" in {
+      enterBarrier("starting-3")
       runOn(node3) {
         within(30 seconds) {
           rsm ! SetNodeData("foo", "/node1", ByteString("hello, world"), None, DateTime.now())
-          val result = expectMsgClass(classOf[WorldStateResult])
+          val result = expectMsgClass(classOf[SetNodeDataResult])
         }
       }
       enterBarrier("finished-3")
     }
 
     "delete a namespace node" in {
+      enterBarrier("starting-4")
       runOn(node4) {
         within(30 seconds) {
           rsm ! DeleteNode("foo", "/node1", None, DateTime.now())
-          val result = expectMsgClass(classOf[WorldStateResult])
+          val result = expectMsgClass(classOf[DeleteNodeResult])
+          result.path.segments must be === Path("/node1").segments
         }
       }
       enterBarrier("finished-4")
     }
 
     "delete a namespace" in {
+      enterBarrier("starting-5")
       runOn(node5) {
         within(30 seconds) {
           rsm ! DeleteNamespace("foo")
-          val result = expectMsgClass(classOf[WorldStateResult])
-          result.world.namespaces.keys must not contain("foo")
+          val result = expectMsgClass(classOf[DeleteNamespaceResult])
+          result.name must be("foo")
         }
       }
       enterBarrier("finished-5")
