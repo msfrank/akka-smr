@@ -160,7 +160,9 @@ extends Actor with ActorLogging {
         case mutation: MutationResult =>
           var callerNotifications = Map.empty[NamespacePath,Notification]
           var observerNotifications = Map.empty[ActorRef,Map[NamespacePath,Notification]]
-          mutation.notifyPath().foreach {
+          val notifications = mutation.notifyPath()
+          log.debug("mutation command resulted in notification events {}", notifications)
+          notifications.foreach {
             case notification =>
               watches.get(notification.nspath) match {
                 case Some(watchers) =>
@@ -179,7 +181,10 @@ extends Actor with ActorLogging {
           else
             request.caller ! result
           // signal any outstanding watches
-          observerNotifications.foreach { case (observer, notifications) => observer ! NotificationMap(notifications) }
+          observerNotifications.foreach { case (observer, _notifications) =>
+            log.debug("notifying {} about mutation events {}", observer.path, _notifications)
+            observer ! NotificationMap(_notifications)
+          }
         case _ =>
           request.caller ! result
       }
