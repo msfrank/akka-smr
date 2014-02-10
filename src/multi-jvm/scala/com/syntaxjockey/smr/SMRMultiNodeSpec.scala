@@ -50,5 +50,3 @@ object SMRMultiNodeConfig extends MultiNodeConfig {
   val node4 = role("node4")
   val node5 = role("node5")
 }
-
-
