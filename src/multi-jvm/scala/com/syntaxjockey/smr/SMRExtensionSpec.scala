@@ -38,7 +38,19 @@ class SMRExtensionSpec extends SMRMultiNodeSpec(SMRExtensionMultiNodeConfig) wit
 }
 
 object SMRExtensionMultiNodeConfig extends MultiNodeConfig {
-  commonConfig(ConfigFactory.load("multi-jvm.conf"))
+  commonConfig(ConfigFactory.parseString(
+    """
+      |akka {
+      |  smr {
+      |    smr-name = "smr"
+      |    minimum-nr-processors = 5
+      |    election-timeout = 2 seconds
+      |    election-timeout-variance = 500 milliseconds
+      |    idle-timeout = 1 second
+      |    max-entries-batch = 10
+      |  }
+      |}
+    """.stripMargin).withFallback(ConfigFactory.load("multi-jvm.conf")))
   val node1 = role("node1")
   val node2 = role("node2")
   val node3 = role("node3")

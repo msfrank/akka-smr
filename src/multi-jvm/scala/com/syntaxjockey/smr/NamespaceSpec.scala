@@ -38,7 +38,7 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
       for (_ <- 0.until(roles.size)) { expectMsgClass(classOf[MemberUp]) }
       enterBarrier("startup")
       rsm = system.actorOf(ReplicatedStateMachine.props(self, roles.size, electionTimeout, idleTimeout, maxEntriesBatch), "rsm")
-      within(30 seconds) { expectMsg(RSMReady) }
+      within(30 seconds) { expectMsg(SMRClusterReadyEvent) }
       runOn(node1) {
         within(30 seconds) {
           rsm ! CreateNamespace("foo")

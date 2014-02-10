@@ -31,7 +31,7 @@ class ReplicatedStateMachineSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) wi
       for (_ <- 0.until(roles.size)) { expectMsgClass(classOf[MemberUp]) }
       enterBarrier("startup")
       system.actorOf(ReplicatedStateMachine.props(self, roles.size, electionTimeout, idleTimeout, maxEntriesBatch))
-      within(30 seconds) { expectMsg(RSMReady) }
+      within(30 seconds) { expectMsg(SMRClusterReadyEvent) }
       enterBarrier("finished")
     }
 
@@ -42,7 +42,7 @@ class ReplicatedStateMachineSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) wi
 //      for (_ <- 0.until(roles.size)) { expectMsgClass(classOf[MemberUp]) }
 //      enterBarrier("startup")
 //      val rsm = system.actorOf(ReplicatedStateMachine.props(self, 3))
-//      within(1 minute) { expectMsg(RSMReady) }
+//      within(1 minute) { expectMsg(SMRClusterReadyEvent) }
 //      rsm ! RSMStatusQuery
 //      expectMsgClass(classOf[RSMStatusResult])
 //    }

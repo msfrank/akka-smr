@@ -95,7 +95,7 @@ extends Actor with ActorLogging with WatchOperations {
       val initialized = leader.isDefined
       leader = if (newLeader == localProcessor) Some(self) else Some(remoteProcessors(newLeader.path.address))
       if (!initialized)
-        monitor ! RSMReady
+        monitor ! SMRClusterReadyEvent
       if (!buffered.isEmpty && inflight.isEmpty) {
         val request = buffered.head
         leader.get ! request.command
@@ -190,12 +190,6 @@ object ReplicatedStateMachine {
   case class Request(command: Command, caller: ActorRef)
   case object ReadCurrentClusterState
 }
-
-/**
- * Notify the RSM monitor that the cluster has successfully initialized and
- * is ready to accept commands.
- */
-case object RSMReady
 
 /**
  * Get status of the RSM.
