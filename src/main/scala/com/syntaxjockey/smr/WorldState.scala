@@ -1,7 +1,8 @@
 package com.syntaxjockey.smr
 
-import com.syntaxjockey.smr.namespace.Namespace
+import com.syntaxjockey.smr.namespace.{NamespacePath, Namespace}
 import scala.util.{Success, Failure, Try}
+import akka.actor.ActorRef
 
 /**
  * Contains the state of the entire world.  Every state machine operation takes
@@ -16,7 +17,7 @@ object WorldState {
 }
 
 case object GetWorldState extends Command {
-  def apply(world: WorldState): Try[WorldStateResult] = Success(WorldStateResult(world, GetWorldStateResult(world)))
+  def apply(world: WorldState): Try[WorldStateResult] = Success(WorldStateResult(world, GetWorldStateResult(world), Map.empty))
 }
 
 case class GetWorldStateResult(world: WorldState) extends Result

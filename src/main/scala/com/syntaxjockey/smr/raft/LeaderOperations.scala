@@ -133,20 +133,29 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
     // update the commit index and apply the command
     case Event(ApplyCommitted, Leader(followerStates, commitQueue)) =>
       val logEntry = commitQueue.head
+      val caller = logEntry.caller
       commitIndex = logEntry.index
       log.info("committed log entry {}", logEntry)
-      val response = logEntry.command.apply(world) match {
-        case Success(WorldStateResult(updated, result)) =>
-          world = updated
-          CommandExecuted(logEntry, result)
-        case Failure(ex) =>
-          log.error("{} failed: {}", logEntry.command, ex)
-          CommandExecuted(logEntry, new CommandFailed(ex, logEntry.command))
-      }
-      log.debug("application of {} returns {}", logEntry.command, response.result)
       // mark the log entry as applied and pass the command result to the caller
       lastApplied = logEntry.index
-      logEntry.caller ! response
+      logEntry.command.apply(world) match {
+        case Success(WorldStateResult(updated, result, notifications)) =>
+          world = updated
+          log.debug("EXEC {} returns {}", logEntry.command, result)
+          // signal any outstanding watches
+          if (!notifications.isEmpty) {
+            // FIXME: should probably send to followers, not peers, but followers contains the wrong ref
+            peers.foreach { peer =>
+              log.debug("NOTIFY mutation generated events {}", notifications)
+              peer ! NotificationMap(notifications)
+            }
+          }
+          // respond to the caller with the command result
+          caller ! CommandExecuted(logEntry, result)
+        case Failure(ex) =>
+          log.debug("EXEC {} failed: {}", logEntry.command, ex)
+          logEntry.caller ! CommandExecuted(logEntry, new CommandFailed(ex, logEntry.command))
+      }
       // if there are more log entries in the queue, then start committing the next one
       val updatedQueue = commitQueue.tail
       if (!updatedQueue.isEmpty)

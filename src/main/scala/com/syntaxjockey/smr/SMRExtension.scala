@@ -11,7 +11,7 @@ case object SMRClusterReadyEvent extends SMREvent
 case object SMRClusterLostEvent extends SMREvent
 
 /**
- *
+ * Forwards SMREvent messages from the SMRExtension to the ActorSystem event stream.
  */
 class SMREventStream extends Actor {
   def receive = {
@@ -20,7 +20,7 @@ class SMREventStream extends Actor {
 }
 
 /**
- *
+ * SMRExtension implementation.
  */
 class SMRExtensionImpl(system: ActorSystem) extends Extension {
   val config = system.settings.config.getConfig("akka.smr")
@@ -41,7 +41,7 @@ class SMRExtensionImpl(system: ActorSystem) extends Extension {
 }
 
 /**
- *
+ * Entry point to the SMR layer.
  */
 object SMRExtension extends ExtensionId[SMRExtensionImpl] with ExtensionIdProvider {
   override def lookup() = SMRExtension
@@ -50,7 +50,7 @@ object SMRExtension extends ExtensionId[SMRExtensionImpl] with ExtensionIdProvid
 }
 
 /**
- *
+ * Shorthand entry point to the SMR layer.
  */
 object SMR {
   def apply(system: ActorSystem): ActorRef = SMRExtension(system).rsm

@@ -19,7 +19,7 @@ class ReplicatedStateMachine(monitor: ActorRef,
                              electionTimeout: RandomBoundedDuration,
                              idleTimeout: FiniteDuration,
                              maxEntriesBatch: Int)
-extends Actor with ActorLogging with WatchOperations {
+extends Actor with ActorLogging {
   import ReplicatedStateMachine._
   import com.syntaxjockey.smr.raft.RaftProcessor.Leader
   import context.dispatcher
@@ -112,16 +112,20 @@ extends Actor with ActorLogging with WatchOperations {
      *  2. Once the command has been acknowledged by the processor, the processor will reply with
      *     CommandAccepted.
      */
+
+    case watch @ Watch(command, observer) =>
+      watches = watch.updateWatches(watches)
+      self.tell(command, sender())
+
     case command: Command =>
-      val _command = updateWatches(command)
-      val request = Request(_command, sender())
+      val request = Request(command, sender())
       if (inflight.isEmpty) {
-        localProcessor ! _command
+        localProcessor ! command
         inflight = Some(request)
-        log.debug("COMMAND {} submitted", _command)
+        log.debug("COMMAND {} submitted", command)
       } else {
         buffered = buffered :+ request
-        log.debug("COMMAND {} buffered", _command)
+        log.debug("COMMAND {} buffered", command)
       }
 
     case RetryCommand(command: Command) =>
@@ -149,32 +153,22 @@ extends Actor with ActorLogging with WatchOperations {
       log.debug("COMMAND {} returned {}", logEntry.command, result)
       val request = accepted.head
       accepted = accepted.tail
-      val notifications = notifyWatches(result)
-      // respond to the caller with the command result and any outstanding notifications
-      notifications.get(request.caller) match {
-        case Some(callerNotifications) =>
-          request.caller ! NotificationResult(result, NotificationMap(callerNotifications))
-        case None =>
-          request.caller ! result
-      }
-      // signal any outstanding watches
-      (notifications - request.caller) foreach { case (observer, observerNotifications) =>
-        log.debug("command executed: notifying {} about mutation events {}", observer.path, observerNotifications)
-        observer ! NotificationMap(observerNotifications)
-      }
+      request.caller ! result
 
-    case CommandApplied(logEntry, result) =>
-      val notifications = notifyWatches(result)
-      // signal any outstanding watches
-      notifications foreach { case (observer, observerNotifications) =>
-        log.debug("command applied: notifying {} about mutation events {}", observer.path, observerNotifications)
-        observer ! NotificationMap(observerNotifications)
+    case NotificationMap(notifications) =>
+      notifications.values.foreach { notification =>
+        watches = watches.get(notification.nspath) match {
+          case Some(observers) =>
+            observers.foreach(_ ! notification)
+            watches - notification.nspath
+          case None => watches
+        }
       }
 
     /* forward internal messages to the processor */
     case message: RaftProcessorMessage =>
-      //log.debug("forwarding message {} from {} to {}", message, sender().path, localProcessor)
       localProcessor.forward(message)
+      //log.debug("forwarding message {} from {} to {}", message, sender().path, localProcessor)
   }
 }
 

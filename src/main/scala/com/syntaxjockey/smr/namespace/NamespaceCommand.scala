@@ -1,19 +1,21 @@
 package com.syntaxjockey.smr.namespace
 
-import com.syntaxjockey.smr.{Result, WorldStateResult, WorldState, Command}
+import com.syntaxjockey.smr._
 import scala.util.{Failure, Success, Try}
 
 sealed trait NamespaceCommand extends Command
 
-case class CreateNamespace(name: String) extends NamespaceCommand {
-  def apply(world: WorldState): Try[WorldStateResult] = if (!world.namespaces.contains(name)) {
-    Success(WorldStateResult(WorldState(world.version + 1, world.namespaces + (name -> Namespace(name))), CreateNamespaceResult(name, this)))
+case class CreateNamespace(name: String) extends NamespaceCommand with MutationCommand {
+  def transform(world: WorldState): Try[WorldStateResult] = if (!world.namespaces.contains(name)) {
+    val transformed = WorldState(world.version + 1, world.namespaces + (name -> Namespace(name)))
+    Success(WorldStateResult(transformed, CreateNamespaceResult(name, this)))
   } else Failure(new NamespaceExists(name))
 }
 
-case class DeleteNamespace(name: String) extends NamespaceCommand {
-  def apply(world: WorldState): Try[WorldStateResult] = if (world.namespaces.contains(name)) {
-    Success(WorldStateResult(WorldState(world.version + 1, world.namespaces - name), DeleteNamespaceResult(name, this)))
+case class DeleteNamespace(name: String) extends NamespaceCommand with MutationCommand {
+  def transform(world: WorldState): Try[WorldStateResult] = if (world.namespaces.contains(name)) {
+    val transformed = WorldState(world.version + 1, world.namespaces - name)
+    Success(WorldStateResult(transformed, DeleteNamespaceResult(name, this)))
   } else Failure(new NamespaceAbsent(name))
 }
 

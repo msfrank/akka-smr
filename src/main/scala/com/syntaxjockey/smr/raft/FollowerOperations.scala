@@ -102,9 +102,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
               val updatedIndex = math.min(appendEntries.leaderCommit, logEntries.last.index)
               world = logEntries.slice(commitIndex + 1, updatedIndex + 1).foldLeft(world) { case (acc, logEntry: LogEntry) =>
                 logEntry.command.apply(acc) match {
-                  case Success(WorldStateResult(updated, _result)) =>
-                    monitor ! CommandApplied(logEntry, _result)
-                    updated
+                  case Success(WorldStateResult(updated, _, _)) => updated
                   case Failure(ex) => acc
                 }
               }

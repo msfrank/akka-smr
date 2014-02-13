@@ -23,7 +23,7 @@ abstract class SMRMultiNodeSpec(config: MultiNodeConfig) extends MultiNodeSpec(c
   private val lc = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]
 
   private val ple = new PatternLayoutEncoder()
-  ple.setPattern("%X{akkaTimestamp} %-5level %logger{36} %X{akkaSource} - %msg%n")
+  ple.setPattern("%X{akkaTimestamp} %-5level %X{akkaSource} - %msg%n")
   ple.setContext(lc)
   ple.start()
 

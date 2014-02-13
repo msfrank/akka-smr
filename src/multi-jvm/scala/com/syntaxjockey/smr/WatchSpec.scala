@@ -26,7 +26,7 @@ class WatchSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender
   "A Watch" must {
 
     val electionTimeout = RandomBoundedDuration(4500 milliseconds, 5000 milliseconds)
-    val idleTimeout = 2 seconds
+    val idleTimeout = 2.seconds
     val maxEntriesBatch = 10
     var rsm: ActorRef = ActorRef.noSender
 
@@ -48,15 +48,11 @@ class WatchSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender
           rsm ! Watch(GetNodeData("foo", "/node1"), self)
           expectMsgClass(classOf[GetNodeDataResult])
           rsm ! SetNodeData("foo", "/node1", ByteString("node data changed"), None, DateTime.now())
-          expectMsgClass(classOf[NotificationResult]) match {
-            case NotificationResult(result: SetNodeDataResult, notifications) =>
-              val expectedPath =  NamespacePath("foo", "/node1")
-              notifications.notifications.contains(expectedPath) must be(true)
-              val notification = notifications.notifications(expectedPath)
-              notification.event must be(Notification.NodeDataChangedEvent)
-            case _ =>
-              fail()
-          }
+          val notification = expectMsgClass(classOf[Notification])
+          val expectedPath =  NamespacePath("foo", "/node1")
+          notification.nspath must be === expectedPath
+          notification.event must be(Notification.NodeDataChangedEvent)
+          expectMsgClass(classOf[SetNodeDataResult])
         }
       }
       enterBarrier("finished-1")
@@ -71,15 +67,10 @@ class WatchSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender
           rsm ! Watch(GetNodeData("foo", "/node2"), self)
           expectMsgClass(classOf[GetNodeDataResult])
           enterBarrier("set-watch")
-          expectMsgClass(classOf[NotificationMap]) match {
-            case NotificationMap(notifications) =>
-              val expectedPath =  NamespacePath("foo", "/node2")
-              notifications.contains(expectedPath) must be(true)
-              val notification = notifications(expectedPath)
-              notification.event must be(Notification.NodeDataChangedEvent)
-            case _ =>
-              fail()
-          }
+          val notification = expectMsgClass(classOf[Notification])
+          val expectedPath =  NamespacePath("foo", "/node2")
+          notification.nspath must be === expectedPath
+          notification.event must be(Notification.NodeDataChangedEvent)
         }
       }
       runOn(node3) {

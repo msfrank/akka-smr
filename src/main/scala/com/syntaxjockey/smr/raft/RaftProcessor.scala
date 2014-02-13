@@ -1,11 +1,13 @@
 package com.syntaxjockey.smr.raft
 
 import akka.actor._
+import akka.actor.OneForOneStrategy
 import scala.concurrent.duration._
+import scala.util.{Try,Success}
 
 import com.syntaxjockey.smr.raft.RaftProcessor.{ProcessorState, ProcessorData}
-import com.syntaxjockey.smr.{WorldStateResult, WorldState, Result, Command}
-import scala.util.{Success, Try}
+import com.syntaxjockey.smr._
+import com.syntaxjockey.smr.namespace.NamespacePath
 
 /**
  * marker trait to identify raft processor messages
@@ -83,7 +85,7 @@ object RaftProcessor {
   case class FollowerState(follower: ActorRef, nextIndex: Int, matchIndex: Int, inFlight: Option[AppendEntriesRPC], nextHeartbeat: Option[Cancellable])
 
   case object NullCommand extends Command {
-    def apply(world: WorldState): Try[WorldStateResult] = Success(WorldStateResult(world, new Result {}))
+    def apply(world: WorldState): Try[WorldStateResult] = Success(WorldStateResult(world, new Result {}, Map.empty))
   }
 
   val InitialEntry = LogEntry(NullCommand, ActorRef.noSender, 0, 0)
@@ -137,7 +139,7 @@ case class CommandRequest(logEntry: LogEntry)
 sealed trait RaftProcessorEvent
 case class CommandAccepted(logEntry: LogEntry) extends RaftProcessorEvent
 case class CommandExecuted(logEntry: LogEntry, result: Result) extends RaftProcessorEvent
-case class CommandApplied(logEntry: LogEntry, result: Result) extends RaftProcessorEvent
+case class CommandApplied(logEntry: LogEntry) extends RaftProcessorEvent
 case class RetryCommand(command: Command) extends RaftProcessorEvent
 case class ProcessorTransitionEvent(prevState: ProcessorState, newState: ProcessorState) extends RaftProcessorEvent
 case class LeaderElectionEvent(leader: ActorRef, term: Int) extends RaftProcessorEvent
