@@ -5,7 +5,7 @@ import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 
 object AkkaSmrBuild extends Build {
 
-  val projectVersion = "0.1"
+  val projectVersion = "0.0.1"
   val akkaVersion = "2.3.0-RC2"
 
   lazy val akkaSmrBuild = Project(
@@ -20,7 +20,7 @@ object AkkaSmrBuild extends Build {
         "com.typesafe.akka" %% "akka-actor" % akkaVersion,
         "com.typesafe.akka" %% "akka-remote" % akkaVersion,
         "com.typesafe.akka" %% "akka-cluster" % akkaVersion,
-        "com.typesafe.akka" %% "akka-persistence-experimental" % akkaVersion,
+        //"com.typesafe.akka" %% "akka-persistence-experimental" % akkaVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "joda-time" % "joda-time" % "2.3",
         "org.joda" % "joda-convert" % "1.6",
