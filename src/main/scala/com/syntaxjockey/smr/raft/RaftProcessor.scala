@@ -140,6 +140,7 @@ sealed trait RaftProcessorEvent
 case class CommandAccepted(logEntry: LogEntry) extends RaftProcessorEvent
 case class CommandExecuted(logEntry: LogEntry, result: Result) extends RaftProcessorEvent
 case class CommandApplied(logEntry: LogEntry) extends RaftProcessorEvent
+case class NotificationMap(notifications: Map[NamespacePath,Notification])
 case class RetryCommand(command: Command) extends RaftProcessorEvent
 case class ProcessorTransitionEvent(prevState: ProcessorState, newState: ProcessorState) extends RaftProcessorEvent
 case class LeaderElectionEvent(leader: ActorRef, term: Int) extends RaftProcessorEvent

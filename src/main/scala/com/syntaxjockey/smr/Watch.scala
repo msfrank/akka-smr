@@ -6,14 +6,12 @@ import scala.util.{Success, Try}
 import com.syntaxjockey.smr.namespace.NamespacePath
 
 /**
- *
- */
-case class Observer(observer: ActorRef, correlationId: Serializable)
-
-/**
  * A command which can be watched.
  */
 trait WatchableCommand extends Command {
+  /**
+   * Returns the absolute path to the node which may be watched.
+   */
   def watchPath(): NamespacePath
 }
 
@@ -21,6 +19,10 @@ trait WatchableCommand extends Command {
  * Set a watch on the specified command.
  */
 case class Watch(command: WatchableCommand, observer: ActorRef) {
+  /**
+   * Returns a copy of the watches Map with a watch added for the namespace path
+   * returned from command.watchPath().
+   */
   def updateWatches(watches: Map[NamespacePath,Set[ActorRef]]): Map[NamespacePath,Set[ActorRef]] = {
     val nspath = command.watchPath()
     watches + (nspath -> (watches.getOrElse(nspath, Set.empty) + observer))
@@ -39,6 +41,9 @@ object Watch {
  */
 trait MutationCommand extends Command {
 
+  /**
+   * Mutate the specified world state, and return the result.
+   */
   def transform(world: WorldState): Try[WorldStateResult]
 
   /**
@@ -62,11 +67,14 @@ trait MutationCommand extends Command {
  * The result of a command which may have mutated the world state.
  */
 trait MutationResult {
+  /**
+   * Return a vector of notifications that result from the mutation.
+   */
   def notifyPath(): Vector[Notification]
 }
 
 /**
- *
+ * Contains the notification type for a namespace path.
  */
 case class Notification(nspath: NamespacePath, event: Notification.NotificationEvent)
 
@@ -77,8 +85,3 @@ object Notification {
   case object NodeDataChangedEvent extends NotificationEvent
   case object NodeDeletedEvent extends NotificationEvent
 }
-
-/**
- *
- */
-case class NotificationMap(notifications: Map[NamespacePath,Notification])
