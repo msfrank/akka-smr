@@ -12,11 +12,11 @@ class NamespaceSpec extends WordSpec with MustMatchers {
   "A Namespace" must {
 
     val timestamp = DateTime.now()
-    val foo = Node("foo", ByteString.empty, Stat(0, 0, 2, 2, timestamp, timestamp, timestamp), Map.empty)
-    val qux = Node("qux", ByteString.empty, Stat(0, 0, 1, 1, timestamp, timestamp, timestamp), Map.empty)
-    val baz = Node("baz", ByteString.empty, Stat(0, 0, 1, 1, timestamp, timestamp, timestamp), Map.empty)
-    val bar = Node("bar", ByteString("hello, world"), Stat(12, 1, 1, 1, timestamp, timestamp, timestamp), Map("qux" -> qux))
-    val root = Node("", ByteString.empty, Stat(0, 3, 1, 1, timestamp, timestamp, timestamp), Map("foo" -> foo, "bar" -> bar, "baz" -> baz))
+    val foo = Node("foo", ByteString.empty, Stat(0, 0, 2, 2, timestamp, timestamp, timestamp, 0), Map.empty)
+    val qux = Node("qux", ByteString.empty, Stat(0, 0, 1, 1, timestamp, timestamp, timestamp, 0), Map.empty)
+    val baz = Node("baz", ByteString.empty, Stat(0, 0, 1, 1, timestamp, timestamp, timestamp, 0), Map.empty)
+    val bar = Node("bar", ByteString("hello, world"), Stat(12, 1, 1, 1, timestamp, timestamp, timestamp, 0), Map("qux" -> qux))
+    val root = Node("", ByteString.empty, Stat(0, 3, 1, 1, timestamp, timestamp, timestamp, 0), Map("foo" -> foo, "bar" -> bar, "baz" -> baz))
     val ns = Namespace("ns", 2, timestamp, root)
 
     "find the root node" in {
@@ -53,7 +53,7 @@ class NamespaceSpec extends WordSpec with MustMatchers {
 
     "create a new node" in {
       val ctime = DateTime.now()
-      val updated = ns.create("/foo/new", ByteString("test data"), ns.version + 1, ctime).get
+      val updated = ns.create("/foo/new", ByteString("test data"), ns.version + 1, ctime, isSequential = false).get
       updated.version must equal(ns.version + 1)
       updated.find("/foo/new") match {
         case None =>
@@ -67,9 +67,26 @@ class NamespaceSpec extends WordSpec with MustMatchers {
       }
     }
 
+    "create a new sequential node" in {
+      val ctime = DateTime.now()
+      val updated = ns.create("/foo/seq", ByteString("test data"), ns.version + 1, ctime, isSequential = true).get
+      updated.version must equal(ns.version + 1)
+      updated.find("/foo/seq-00000001") match {
+        case None =>
+          fail("no node /foo/seq-00000001 defined")
+        case Some(node) =>
+          node.name must equal("seq-00000001")
+          node.data must be === ByteString("test data")
+          node.children must equal(Map.empty)
+          node.stat.dataVersion must equal(updated.version)
+          node.stat.childrenVersion must equal(updated.version)
+          updated.get("/foo").stat.seqCounter must equal(1)
+      }
+    }
+
     "return failure when attempting to create a node whose parent doesn't exist" in {
       val ctime = DateTime.now()
-      ns.create("/foo/bar/new", ByteString("test data"), ns.version + 1, ctime) match {
+      ns.create("/foo/bar/new", ByteString("test data"), ns.version + 1, ctime, isSequential =  false) match {
         case Success(_) => fail("creating node whose parent doesn't exist should return Failure")
         case Failure(ex: InvalidPathException) => // success
         case Failure(ex) => fail("node creation failed with unexpected exception: {}", ex)
@@ -78,7 +95,7 @@ class NamespaceSpec extends WordSpec with MustMatchers {
 
     "return failure when attempting to create a node which already exists" in {
       val ctime = DateTime.now()
-      ns.create("/foo", ByteString("test data"), ns.version + 1, ctime) match {
+      ns.create("/foo", ByteString("test data"), ns.version + 1, ctime, isSequential = false) match {
         case Success(_) => fail("creating node which already exists should return Failure")
         case Failure(ex: InvalidPathException) => // success
         case Failure(ex) => fail("node creation failed with unexpected exception: {}", ex)

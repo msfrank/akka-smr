@@ -11,3 +11,5 @@ class RootModification() extends NamespaceException("Cannot modify /")
 class NamespaceExists(namespace: String) extends NamespaceException("Namespace '%s' already exists".format(namespace))
 
 class NamespaceAbsent(namespace: String) extends NamespaceException("Namespace '%s' doesn't exist".format(namespace))
+
+class SequentialOverflow extends NamespaceException("Cannot create any more sequential children for this Node")

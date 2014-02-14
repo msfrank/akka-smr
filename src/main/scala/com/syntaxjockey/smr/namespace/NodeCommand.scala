@@ -63,12 +63,12 @@ case class GetNodeData(namespace: String, path: Path) extends NodeCommand with W
   def watchPath() = NamespacePath(namespace, path)
 }
 
-case class CreateNode(namespace: String, path: Path, data: ByteString, ctime: DateTime) extends NodeCommand with MutationCommand {
+case class CreateNode(namespace: String, path: Path, data: ByteString, ctime: DateTime, isSequential: Boolean = false) extends NodeCommand with MutationCommand {
   def transform(world: WorldState): Try[WorldStateResult] = {
     world.namespaces.get(namespace) match {
       case Some(ns) =>
         val cversion = world.version + 1
-        ns.create(path, data, cversion, ctime) match {
+        ns.create(path, data, cversion, ctime, isSequential) match {
           case Success(updated) =>
             val transformed = WorldState(cversion, world.namespaces + (namespace -> updated))
             Success(WorldStateResult(transformed, CreateNodeResult(path, this)))

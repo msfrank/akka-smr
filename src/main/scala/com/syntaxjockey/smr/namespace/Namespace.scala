@@ -45,17 +45,23 @@ case class Namespace(name: String, version: Long, lastModified: DateTime, root: 
   /**
    * Create a node at the specified path with the specified data.
    */
-  private def create(parent: Path, node: Node, name: String, data: ByteString, cversion: Long, ctime: DateTime): Try[Node] = {
+  private def create(parent: Path, node: Node, name: String, data: ByteString, cversion: Long, ctime: DateTime, isSequential: Boolean): Try[Node] = {
     if (parent == Path.root) {
-      if (node.children.contains(name)) Failure(new InvalidPathException("node already exists")) else {
-        val child = Node(name, data, Stat(data.length, 0, cversion, cversion, ctime, ctime, ctime), Map.empty)
+      if (node.children.contains(name))
+        Failure(new InvalidPathException("node already exists"))
+      else if (isSequential && node.stat.seqCounter == Int.MaxValue)
+        Failure(new SequentialOverflow())
+      else {
+        val updatedCounter = if (isSequential) node.stat.seqCounter + 1 else node.stat.seqCounter
+        val _name = if (isSequential) "%s-%08x".format(name, updatedCounter) else name
+        val child = Node(_name, data, Stat(data.length, 0, cversion, cversion, ctime, ctime, ctime, 0), Map.empty)
         Success(Node(node.name, node.data,
-          node.stat.copy(numChildren = node.children.size + 1, childrenVersion = cversion, modifiedChildren = ctime),
-          node.children + (name -> child)))
+          node.stat.copy(numChildren = node.children.size + 1, childrenVersion = cversion, modifiedChildren = ctime, seqCounter = updatedCounter),
+          node.children + (_name -> child)))
       }
     } else {
       if (!node.children.contains(parent.head)) Failure(new InvalidPathException("intermediate node doesn't exist")) else {
-        create(parent.tail, node.children(parent.head), name, data, cversion, ctime) match {
+        create(parent.tail, node.children(parent.head), name, data, cversion, ctime, isSequential) match {
           case Success(child) =>
             Success(Node(node.name, node.data,
               node.stat.copy(childrenVersion = cversion, modifiedChildren = ctime),
@@ -66,9 +72,9 @@ case class Namespace(name: String, version: Long, lastModified: DateTime, root: 
       }
     }
   }
-  def create(path: Path, data: ByteString, cversion: Long, ctime: DateTime): Try[Namespace] = {
+  def create(path: Path, data: ByteString, cversion: Long, ctime: DateTime, isSequential: Boolean): Try[Namespace] = {
     if (path == Path.root) Failure(new RootModification()) else {
-      create(path.init, root, path.last, data, cversion, ctime) match {
+      create(path.init, root, path.last, data, cversion, ctime, isSequential) match {
         case Success(croot) =>
           Success(Namespace(name, cversion, ctime, croot))
         case Failure(ex) =>
@@ -163,16 +169,19 @@ case class Namespace(name: String, version: Long, lastModified: DateTime, root: 
    * root node with no data.
    */
   def flush(mversion: Long, mtime: DateTime): Try[Namespace] = {
-    val stat = Stat(0, 0, mversion, mversion, mtime, mtime, mtime)
+    val stat = Stat(0, 0, mversion, mversion, mtime, mtime, mtime, 0)
     val root = Node("", ByteString.empty, stat, Map.empty)
     Success(new Namespace(name, mversion, mtime, root))
   }
 }
 
 object Namespace {
+  /**
+   * Create a new Namespace with the specified name.
+   */
   def apply(name: String) = {
     val timestamp = DateTime.now()
-    val stat = Stat(0, 0, 0, 0, timestamp, timestamp, timestamp)
+    val stat = Stat(0, 0, 0, 0, timestamp, timestamp, timestamp, 0)
     val root = Node("", ByteString.empty, stat, Map.empty)
     new Namespace(name, stat.childrenVersion, timestamp, root)
   }
@@ -184,7 +193,23 @@ object Namespace {
 case class Node(name: String, data: ByteString, stat: Stat, children: Map[String,Node])
 
 /**
- * 
+ * Contains the metadata about a Node.
+ *
+ * @param dataLength Size of the Node data, in bytes.
+ * @param numChildren Count of Node children.
+ * @param dataVersion The version in which the Node data was most recently changed.
+ * @param childrenVersion The version in which the count of Node children was  most recently changed.
+ * @param created The timestamp when the Node was created (NOTE: this is supplied by the client!).
+ * @param modifiedData The timestamp when the Node data was most recently changed (NOTE: this is supplied by the client!).
+ * @param modifiedChildren The timestamp when the count of Node children was most recently changed (NOTE: this is supplied by the client!).
+ * @param seqCounter The sequence counter.  Incremented every time a sequential child node is created.
  */
-case class Stat(dataLength: Int, numChildren: Int, dataVersion: Long, childrenVersion: Long, created: DateTime, modifiedData: DateTime, modifiedChildren: DateTime)
+case class Stat(dataLength: Int,
+                numChildren: Int,
+                dataVersion: Long,
+                childrenVersion: Long,
+                created: DateTime,
+                modifiedData: DateTime,
+                modifiedChildren: DateTime,
+                seqCounter: Int)
 
