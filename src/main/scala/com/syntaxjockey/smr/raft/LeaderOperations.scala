@@ -206,16 +206,15 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
         stay()
       }
 
+    case Event(config: Configuration, follower: Follower) =>
+      log.debug("received {}", config)
+      stay()
   }
 
   onTransition {
     case transition @ Candidate -> Leader =>
       monitor ! ProcessorTransitionEvent(transition._1, transition._2)
       monitor ! LeaderElectionEvent(self, currentTerm)
-      stateData match {
-        case Candidate(_, nextElection) => nextElection.cancel()
-        case _ => // do nothing
-      }
       log.debug("election complete, we become the new leader")
       self ! SynchronizeInitial
 

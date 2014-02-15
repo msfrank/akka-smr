@@ -37,6 +37,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       log.debug("RPC {} from {}", rpc, sender().path)
       // we are not in the current term, so withdraw our candidacy
       currentTerm = candidateTerm
+      cancelTimer("election-timeout")
       goto(Follower) using Follower(None)
 
     case Event(rpc @ RequestVoteRPC(candidateTerm, candidateLastIndex, candidateLastTerm), _) =>
@@ -65,9 +66,10 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       log.debug("RESULT {} from {}", result, sender().path)
       // we are not in the current term, so withdraw our candidacy
       currentTerm = candidateTerm
+      cancelTimer("election-timeout")
       goto(Follower) using Follower(None)
 
-    case Event(result @ RequestVoteResult(candidateTerm, voteGranted), Candidate(currentTally, nextElection)) =>
+    case Event(result @ RequestVoteResult(candidateTerm, voteGranted), Candidate(currentTally)) =>
       log.debug("RESULT {} from {}", result, sender().path)
       // ignore results with candidateTerm < currentTerm
       val votesReceived = if (voteGranted && candidateTerm == currentTerm) currentTally + sender else currentTally
@@ -77,10 +79,11 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
         val followerStates = votesReceived.map { follower =>
           follower -> FollowerState(follower, lastEntry.index + 1, 0, None, None)
         }.toMap
+        cancelTimer("election-timeout")
         goto(Leader) using Leader(followerStates, Vector.empty)
       }
       else
-        stay() using Candidate(votesReceived, nextElection)
+        stay() using Candidate(votesReceived)
 
     case Event(appendEntries: AppendEntriesRPC, _) =>
       log.debug("RPC {} from {}", appendEntries, sender().path)
@@ -88,6 +91,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       if (appendEntries.term >= currentTerm) {
         currentTerm = appendEntries.term
         self forward appendEntries  // reinject message for processing in Follower state
+        cancelTimer("election-timeout")
         goto(Follower) using Follower(Some(sender()))
       } else stay() replying LeaderTermExpired(currentTerm)
 
@@ -96,9 +100,12 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
 
     case Event(ElectionTimeout, _) =>
       log.debug("election had no result")
-      // FIXME: randomize the election timeout
-      val scheduledCall = context.system.scheduler.scheduleOnce(electionTimeout.nextDuration, self, ElectionTimeout)
-      goto(Candidate) using Candidate(Set.empty, scheduledCall)
+      setTimer("election-timeout", ElectionTimeout, electionTimeout.nextDuration)
+      goto(Candidate) using Candidate(Set.empty)
+
+    case Event(config: Configuration, follower: Follower) =>
+      log.debug("received {}", config)
+      stay()
   }
 
 
@@ -112,5 +119,6 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       peers.foreach(_ ! vote)
       currentTerm = nextTerm
       votedFor = self
+      setTimer("election-timeout", ElectionTimeout, electionTimeout.nextDuration)
   }
 }

@@ -25,7 +25,7 @@ extends Actor with ActorLogging {
   import context.dispatcher
 
   // config
-  val localProcessor = context.actorOf(RaftProcessor.props(self, electionTimeout, idleTimeout, maxEntriesBatch))
+  val localProcessor = context.actorOf(RaftProcessor.props(self, minimumProcessors, electionTimeout, idleTimeout, maxEntriesBatch))
 
   // state
   var clusterState: CurrentClusterState = CurrentClusterState(SortedSet.empty, Set.empty, Set.empty, None, Map.empty)
@@ -65,20 +65,22 @@ extends Actor with ActorLogging {
     case ActorIdentity(member: Member, Some(ref)) =>
       if (ref != self) {
         remoteProcessors = remoteProcessors + (member.address -> ref)
-        if (remoteProcessors.size >= minimumProcessors - 1) {
-          localProcessor ! StartProcessing(remoteProcessors.values.toSet)
-          log.debug("replicated state machine is now ready")
-        }
+        localProcessor ! Configuration(remoteProcessors.values.toSet)
       }
 
     case ActorIdentity(member: Member, None) =>
       log.warning("remote processor not found on member {}", member)
 
+    case MemberExited(member) =>
+      log.info("member {} has exited", member)
+
     case UnreachableMember(member) =>
       log.warning("member {} detected as unreachable", member)
 
     case MemberRemoved(member, previousStatus) =>
-      log.warning("member {} has been removed (previous status was {})", member, previousStatus)
+      log.warning("member {} has been removed", member)
+      remoteProcessors = remoteProcessors - member.address
+      localProcessor ! Configuration(remoteProcessors.values.toSet)
 
      /* return RSM status */
     case RSMStatusQuery =>

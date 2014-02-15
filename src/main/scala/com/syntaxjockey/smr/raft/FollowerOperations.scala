@@ -57,7 +57,8 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
         log.debug("granting vote for term {} to {}", currentTerm, votedFor.path)
       else
         log.debug("rejecting vote for term {} from {}", currentTerm, sender().path)
-      stay() replying result forMax electionTimeout.nextDuration
+      setTimer("follower-timeout", FollowerTimeout, electionTimeout.nextDuration)
+      stay() replying result
 
     case Event(command: Command, Follower(leaderOption)) =>
       leaderOption match {
@@ -71,6 +72,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
 
     case Event(appendEntries: AppendEntriesRPC, Follower(leaderOption)) =>
       log.debug("RPC {} from {}", appendEntries, sender().path)
+      setTimer("follower-timeout", FollowerTimeout, electionTimeout.nextDuration)
       if (appendEntries.term >= currentTerm) {
         // the current term has concluded, recognize sender as the new leader
         if (appendEntries.term > currentTerm)
@@ -120,24 +122,23 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
           case Some(leader) if leader != sender() => monitor ! LeaderElectionEvent(sender(), currentTerm)
           case _ => // do nothing
         }
-        stay() replying result using Follower(Some(sender())) forMax electionTimeout
+        stay() replying result using Follower(Some(sender()))
       }
-      else stay() replying LeaderTermExpired(currentTerm) forMax electionTimeout
+      else stay() replying LeaderTermExpired(currentTerm)
 
-    case Event(StateTimeout, follower: Follower) =>
-      log.debug("received no messages for {}, election must be held", electionTimeout)
-      // FIXME: randomize the election timeout
-      val scheduledCall = context.system.scheduler.scheduleOnce(electionTimeout, self, ElectionTimeout)
-      goto(Candidate) using Candidate(Set.empty, scheduledCall)
+    case Event(FollowerTimeout, follower: Follower) =>
+      log.debug("follower timed out waiting for RPC, election must be held")
+      cancelTimer("follower-timeout")
+      goto(Candidate) using Candidate(Set.empty)
+
+    case Event(config: Configuration, follower: Follower) =>
+      log.debug("received {}", config)
+      stay()
   }
 
   onTransition {
     case transition @ Candidate -> Follower =>
       monitor ! ProcessorTransitionEvent(transition._1, transition._2)
-      stateData match {
-        case Candidate(_, scheduledCall) => scheduledCall.cancel()
-        case _ => // do nothing
-      }
       nextStateData match {
         case Follower(Some(leader)) =>
           monitor ! LeaderElectionEvent(leader, currentTerm)
@@ -145,6 +146,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
         case Follower(None) =>
           log.debug("we become follower, awaiting communication from new leader")
       }
+      setTimer("follower-timeout", FollowerTimeout, electionTimeout.nextDuration)
 
     case transition @ Leader -> Follower =>
       monitor ! ProcessorTransitionEvent(transition._1, transition._2)
@@ -160,8 +162,10 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
           log.debug("following new leader {}", leader.path)
         case _ => // do nothing
       }
+      setTimer("follower-timeout", FollowerTimeout, electionTimeout.nextDuration)
 
     case transition @ _ -> Follower =>
       monitor ! ProcessorTransitionEvent(transition._1, transition._2)
+      setTimer("follower-timeout", FollowerTimeout, electionTimeout.nextDuration)
   }
 }
