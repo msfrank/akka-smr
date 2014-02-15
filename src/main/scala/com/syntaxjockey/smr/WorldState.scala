@@ -1,7 +1,9 @@
 package com.syntaxjockey.smr
 
-import com.syntaxjockey.smr.namespace.{NamespacePath, Namespace}
-import scala.util.{Success, Failure, Try}
+import com.syntaxjockey.smr.namespace.Namespace
+import scala.util.{Success, Try}
+
+import com.syntaxjockey.smr.raft.Peer
 import akka.actor.ActorRef
 
 /**
@@ -9,13 +11,13 @@ import akka.actor.ActorRef
  * the current world state as the input, and returns a transformed world state as
  * the output, without any side effects.
  */
-case class WorldState(version: Long, namespaces: Map[String,Namespace])
+case class WorldState(version: Long, namespaces: Map[String,Namespace], peers: Map[ActorRef,Peer])
 
 object WorldState {
   /**
    * creatio ex nihilo, aka 'the singularity' :)
    */
-  val void = WorldState(0, Map.empty)
+  val void = WorldState(0, Map.empty, Map.empty)
 }
 
 /**

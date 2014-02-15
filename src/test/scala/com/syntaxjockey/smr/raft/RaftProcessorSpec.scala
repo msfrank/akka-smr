@@ -95,7 +95,7 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
 class TestExecutor extends Actor with ActorLogging {
   import TestExecutor._
 
-  var world: WorldState = WorldState(0, Map.empty)
+  var world: WorldState = WorldState(0, Map.empty, Map.empty)
 
   def receive = {
     case command: TestCommand =>

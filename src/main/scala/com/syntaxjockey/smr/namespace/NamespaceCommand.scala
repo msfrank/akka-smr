@@ -7,14 +7,14 @@ sealed trait NamespaceCommand extends Command
 
 case class CreateNamespace(name: String) extends NamespaceCommand with MutationCommand {
   def transform(world: WorldState): Try[WorldStateResult] = if (!world.namespaces.contains(name)) {
-    val transformed = WorldState(world.version + 1, world.namespaces + (name -> Namespace(name)))
+    val transformed = WorldState(world.version + 1, world.namespaces + (name -> Namespace(name)), world.peers)
     Success(WorldStateResult(transformed, CreateNamespaceResult(name, this)))
   } else Failure(new NamespaceExists(name))
 }
 
 case class DeleteNamespace(name: String) extends NamespaceCommand with MutationCommand {
   def transform(world: WorldState): Try[WorldStateResult] = if (world.namespaces.contains(name)) {
-    val transformed = WorldState(world.version + 1, world.namespaces - name)
+    val transformed = WorldState(world.version + 1, world.namespaces - name, world.peers)
     Success(WorldStateResult(transformed, DeleteNamespaceResult(name, this)))
   } else Failure(new NamespaceAbsent(name))
 }

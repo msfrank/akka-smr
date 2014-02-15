@@ -35,7 +35,6 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
   import SupervisorStrategy.Stop
 
   val ec = context.dispatcher
-  val sessionId = UUID.randomUUID()
 
   // persistent server state
   var currentTerm: Int = 0
@@ -44,7 +43,6 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
 
   // volatile server state
   var peers: Set[ActorRef] = Set.empty
-  var configEpoch: Int = 0
   var commitIndex: Int = 0
   var lastApplied: Int = 0
 
@@ -91,7 +89,6 @@ object RaftProcessor {
   }
 
   // helper classes
-  case class Peer(ref: ActorRef, epoch: Int)
   case class FollowerState(follower: ActorRef, nextIndex: Int, matchIndex: Int, inFlight: Option[AppendEntriesRPC], nextHeartbeat: Option[Cancellable])
 
   case object NullCommand extends Command {
@@ -143,7 +140,6 @@ object RaftProcessor {
 /**
  *
  */
-case class Configuration(peers: Set[ActorRef])
 case class CommandRequest(logEntry: LogEntry)
 
 // events
