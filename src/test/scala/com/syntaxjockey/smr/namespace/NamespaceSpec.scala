@@ -84,9 +84,19 @@ class NamespaceSpec extends WordSpec with MustMatchers {
       }
     }
 
+    "return failure when attempting to create a sequential node on a parent whose seqCounter is Int.maxValue" in {
+      val ns = Namespace("ns", 2, timestamp, Node("", ByteString.empty, Stat(0, 0, 1, 1, timestamp, timestamp, timestamp, Int.MaxValue), Map.empty))
+      val ctime = DateTime.now()
+      ns.create("/seq", ByteString("test data"), ns.version + 1, ctime, isSequential = true) match {
+        case Success(_) => fail("creating sequential node should return Failure")
+        case Failure(ex: SequentialOverflow) => // success
+        case Failure(ex) => fail("node creation failed with unexpected exception: {}", ex)
+      }
+    }
+
     "return failure when attempting to create a node whose parent doesn't exist" in {
       val ctime = DateTime.now()
-      ns.create("/foo/bar/new", ByteString("test data"), ns.version + 1, ctime, isSequential =  false) match {
+      ns.create("/foo/bar/new", ByteString("test data"), ns.version + 1, ctime, isSequential = false) match {
         case Success(_) => fail("creating node whose parent doesn't exist should return Failure")
         case Failure(ex: InvalidPathException) => // success
         case Failure(ex) => fail("node creation failed with unexpected exception: {}", ex)
