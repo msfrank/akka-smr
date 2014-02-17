@@ -101,7 +101,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       setTimer("election-timeout", ElectionTimeout, electionTimeout.nextDuration)
       goto(Candidate) using Candidate(Set.empty)
 
-    // candidate doesn't do anything with a configuraiton
+    // candidate doesn't do anything with a configuration
     case Event(config: Configuration, _) =>
       stay()
   }

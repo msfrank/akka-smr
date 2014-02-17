@@ -100,6 +100,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
               appendEntries.entries.foreach {
                 case LogEntry(command: ConfigurationCommand, _, _, _) =>
                   world = WorldState(world.version, world.namespaces, ConfigurationState(world.config.states :+ command.config))
+                  log.debug("merged configuration, peers set becomes:\n{}", command.config.peers.map("  " + _).mkString("\n"))
                 case _ => // do nothing
               }
             }
@@ -108,7 +109,9 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
               val updatedIndex = math.min(appendEntries.leaderCommit, logEntries.last.index)
               world = logEntries.slice(commitIndex + 1, updatedIndex + 1).foldLeft(world) { case (acc, logEntry: LogEntry) =>
                 logEntry.command.apply(acc) match {
-                  case Success(WorldStateResult(updated, _, _)) => updated
+                  case Success(WorldStateResult(updated, _, _)) =>
+                    if (logEntry.command.isInstanceOf[ConfigurationCommand]) { monitor ! SMRClusterChangedEvent }
+                    updated
                   case Failure(ex) => acc
                 }
               }

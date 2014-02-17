@@ -21,7 +21,7 @@ class ReplicatedStateMachineSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) wi
   "A ReplicatedStateMachine cluster" must {
 
     val electionTimeout = RandomBoundedDuration(4500 milliseconds, 5000 milliseconds)
-    val idleTimeout = 2 seconds
+    val idleTimeout = 2.seconds
     val maxEntriesBatch = 10
 
     "wait for all nodes to become ready" in {

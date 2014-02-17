@@ -40,7 +40,7 @@ extends Actor with ActorLogging {
   Cluster(context.system).subscribe(self, InitialStateAsEvents, classOf[MemberEvent])
 
   // read current state every 5 minutes
-  context.system.scheduler.schedule(5 minutes, 5 minutes, self, ReadCurrentClusterState)
+  context.system.scheduler.schedule(5.minutes, 5.minutes, self, ReadCurrentClusterState)
 
   def receive = {
 
@@ -78,7 +78,6 @@ extends Actor with ActorLogging {
       log.warning("member {} detected as unreachable", member)
 
     case MemberRemoved(member, previousStatus) =>
-      log.warning("member {} has been removed", member)
       remoteProcessors = remoteProcessors - member.address
       localProcessor ! Configuration(remoteProcessors.values.toSet)
 

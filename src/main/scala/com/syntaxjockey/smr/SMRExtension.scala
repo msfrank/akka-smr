@@ -9,6 +9,7 @@ import com.syntaxjockey.smr.raft.RandomBoundedDuration
 trait SMREvent
 case object SMRClusterReadyEvent extends SMREvent
 case object SMRClusterLostEvent extends SMREvent
+case object SMRClusterChangedEvent extends SMREvent
 
 /**
  * Forwards SMREvent messages from the SMRExtension to the ActorSystem event stream.
