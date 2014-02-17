@@ -70,7 +70,7 @@ case class CreateNode(namespace: String, path: Path, data: ByteString, ctime: Da
         val cversion = world.version + 1
         ns.create(path, data, cversion, ctime, isSequential) match {
           case Success(updated) =>
-            val transformed = WorldState(cversion, world.namespaces + (namespace -> updated), world.peers)
+            val transformed = WorldState(cversion, world.namespaces + (namespace -> updated), world.config)
             Success(WorldStateResult(transformed, CreateNodeResult(path, this)))
           case Failure(ex) =>
             Failure(ex)
@@ -88,7 +88,7 @@ case class SetNodeData(namespace: String, path: Path, data: ByteString, version:
         val mversion = world.version + 1
         ns.update(path, data, version, mversion, mtime) match {
           case Success(updated) =>
-            val transformed = WorldState(mversion, world.namespaces + (namespace -> updated), world.peers)
+            val transformed = WorldState(mversion, world.namespaces + (namespace -> updated), world.config)
             Success(WorldStateResult(transformed, SetNodeDataResult(ns.get(path).stat, this)))
           case Failure(ex) =>
             Failure(ex)
@@ -106,7 +106,7 @@ case class DeleteNode(namespace: String, path: Path, version: Option[Long], mtim
         val mversion = world.version + 1
         ns.delete(path, version, mversion, mtime) match {
           case Success(updated) =>
-            val transformed = WorldState(mversion, world.namespaces + (namespace -> updated), world.peers)
+            val transformed = WorldState(mversion, world.namespaces + (namespace -> updated), world.config)
             Success(WorldStateResult(transformed, DeleteNodeResult(path, this)))
           case Failure(ex) =>
             Failure(ex)

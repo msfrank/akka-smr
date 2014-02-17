@@ -4,7 +4,6 @@ import akka.actor._
 import akka.actor.OneForOneStrategy
 import scala.concurrent.duration._
 import scala.util.{Try,Success}
-import java.util.UUID
 
 import com.syntaxjockey.smr.raft.RaftProcessor.{ProcessorState, ProcessorData}
 import com.syntaxjockey.smr._
@@ -42,7 +41,6 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
   var votedFor: ActorRef = ActorRef.noSender
 
   // volatile server state
-  var peers: Set[ActorRef] = Set.empty
   var commitIndex: Int = 0
   var lastApplied: Int = 0
 
@@ -58,9 +56,9 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
   when(Initializing) {
 
     case Event(config: Configuration, Initializing(buffered)) =>
-      peers = config.peers
-      if (peers.size >= minimumProcessors - 1) {
-        log.debug("starting processing with peers:\n{}", peers.map("  " + _).mkString("\n"))
+      if (config.peers.size >= minimumProcessors - 1) {
+        world = WorldState(world.version, world.namespaces, ConfigurationState(Vector(config)))
+        log.debug("starting processing with peers:\n{}", config.peers.map("  " + _).mkString("\n"))
         // redeliver any buffered messages
         buffered.foreach { case (msg,_sender) => self.tell(msg, _sender) }
         goto(Follower) using Follower(None)
@@ -68,6 +66,7 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
 
     case Event(msg, Initializing(buffered)) =>
       log.debug("buffering message {}", msg)
+      // FIXME: use stash() instead
       stay() using Initializing(buffered :+ msg -> sender)
   }
 

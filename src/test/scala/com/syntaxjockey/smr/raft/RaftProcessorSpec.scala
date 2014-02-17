@@ -2,13 +2,13 @@ package com.syntaxjockey.smr.raft
 
 import org.scalatest.{WordSpecLike, BeforeAndAfterAll}
 import org.scalatest.matchers.MustMatchers
-
-import akka.actor.{ActorLogging, Props, Actor, ActorSystem}
+import akka.actor.{ActorLogging, Actor, ActorSystem}
 import akka.testkit.{ImplicitSender, TestKit}
 import com.typesafe.config.ConfigFactory
 import scala.concurrent.duration._
-import com.syntaxjockey.smr.{WorldStateResult, WorldState}
 import scala.util.Success
+
+import com.syntaxjockey.smr.{Configuration, WorldStateResult, WorldState}
 
 class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpecLike with MustMatchers with BeforeAndAfterAll {
   import RaftProcessor._
@@ -95,7 +95,7 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
 class TestExecutor extends Actor with ActorLogging {
   import TestExecutor._
 
-  var world: WorldState = WorldState(0, Map.empty, Map.empty)
+  var world: WorldState = WorldState.void
 
   def receive = {
     case command: TestCommand =>

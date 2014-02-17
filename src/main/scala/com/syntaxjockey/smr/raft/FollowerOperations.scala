@@ -1,12 +1,11 @@
 package com.syntaxjockey.smr.raft
 
 import akka.actor.{ActorRef, LoggingFSM, Actor}
-import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.ExecutionContext
+import scala.util.{Failure, Success}
 
 import com.syntaxjockey.smr.raft.RaftProcessor._
-import com.syntaxjockey.smr.{WorldStateResult, Result, WorldState, Command}
-import scala.util.{Failure, Success}
+import com.syntaxjockey.smr._
 
 /*
  * "Followers are passive: they issue no RPCs on their own but simply respond to RPCs
@@ -27,7 +26,6 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
   var votedFor: ActorRef
 
   // volatile server state
-  var peers: Set[ActorRef]
   var commitIndex: Int
   var lastApplied: Int
 
@@ -98,6 +96,12 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
             if (appendEntries.entries.length > 0) {
               log.debug("appending log entries {}", appendEntries.entries)
               logEntries = logEntries ++ appendEntries.entries
+              // immediately apply any configurations we find
+              appendEntries.entries.foreach {
+                case LogEntry(command: ConfigurationCommand, _, _, _) =>
+                  world = WorldState(world.version, world.namespaces, ConfigurationState(world.config.states :+ command.config))
+                case _ => // do nothing
+              }
             }
             // update commitIndex and apply any outstanding commands
             if (appendEntries.leaderCommit > commitIndex) {
@@ -131,8 +135,9 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
       cancelTimer("follower-timeout")
       goto(Candidate) using Candidate(Set.empty)
 
-    case Event(config: Configuration, follower: Follower) =>
-      log.debug("received {}", config)
+    // we move to a transitional configuration
+    case Event(config: Configuration, _) =>
+      world = WorldState(world.version, world.namespaces, ConfigurationState(world.config.states :+ config))
       stay()
   }
 

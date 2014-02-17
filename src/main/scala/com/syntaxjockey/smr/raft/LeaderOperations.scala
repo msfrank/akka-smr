@@ -28,7 +28,6 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
   var votedFor: ActorRef
 
   // volatile server state
-  var peers: Set[ActorRef]
   var commitIndex: Int
   var lastApplied: Int
 
@@ -48,6 +47,12 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
         case entry => entry
       }
       stay() using Leader(updatedStates, commitQueue)
+
+    // we move to a transitional configuration
+    case Event(config: Configuration, Leader(followerStates, commitQueue)) =>
+      world = WorldState(world.version, world.namespaces, ConfigurationState(world.config.states :+ config))
+      self ! ConfigurationCommand(config)
+      stay()
 
     // synchronize peers which check in after transition to leader
     case Event(voteResult: RequestVoteResult, Leader(followerStates, commitQueue)) =>
@@ -145,6 +150,8 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
           // signal any outstanding watches
           if (!notifications.isEmpty) {
             // FIXME: should probably send to followers, not peers, but followers contains the wrong ref
+            // FIXME: do we send notification to all peers in the transitional state, or just the last state?
+            val peers = if (world.config.states.size == 1) world.config.states.head.peers else world.config.states.flatMap(_.peers)
             peers.foreach { peer =>
               log.debug("NOTIFY mutation generated events {}", notifications)
               peer ! NotificationMap(notifications)
@@ -205,10 +212,6 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
         log.debug("ignoring spurious RPC {} from {}", requestVote, sender().path)
         stay()
       }
-
-    case Event(config: Configuration, follower: Follower) =>
-      log.debug("received {}", config)
-      stay()
   }
 
   onTransition {

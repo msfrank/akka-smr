@@ -1,11 +1,10 @@
 package com.syntaxjockey.smr.raft
 
 import akka.actor.{LoggingFSM, Actor, ActorRef}
-import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.ExecutionContext
 
 import com.syntaxjockey.smr.raft.RaftProcessor._
-import com.syntaxjockey.smr.Command
+import com.syntaxjockey.smr.{ConfigurationState, WorldState, Configuration, Command}
 
 /*
  * "[Candidate state] is used to elect a new leader ... If a candidate wins the
@@ -27,9 +26,10 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
   var votedFor: ActorRef
 
   // volatile server state
-  var peers: Set[ActorRef]
   var commitIndex: Int
   var lastApplied: Int
+
+  var world: WorldState
 
   when(Candidate) {
 
@@ -74,16 +74,14 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       // ignore results with candidateTerm < currentTerm
       val votesReceived = if (voteGranted && candidateTerm == currentTerm) currentTally + sender else currentTally
       // if we have received a majority of votes, then become leader
-      if (votesReceived.size > (peers.size / 2)) {
+      if (receivedMajority(votesReceived)) {
         val lastEntry = logEntries.lastOption.getOrElse(InitialEntry)
         val followerStates = votesReceived.map { follower =>
           follower -> FollowerState(follower, lastEntry.index + 1, 0, None, None)
         }.toMap
         cancelTimer("election-timeout")
         goto(Leader) using Leader(followerStates, Vector.empty)
-      }
-      else
-        stay() using Candidate(votesReceived)
+      } else stay() using Candidate(votesReceived)
 
     case Event(appendEntries: AppendEntriesRPC, _) =>
       log.debug("RPC {} from {}", appendEntries, sender().path)
@@ -103,11 +101,23 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       setTimer("election-timeout", ElectionTimeout, electionTimeout.nextDuration)
       goto(Candidate) using Candidate(Set.empty)
 
-    case Event(config: Configuration, follower: Follower) =>
-      log.debug("received {}", config)
+    // candidate doesn't do anything with a configuraiton
+    case Event(config: Configuration, _) =>
       stay()
   }
 
+  /**
+   * Compare the current tally against all configurations.  If we have the majority in
+   * every configuration then we have won the election, so return true, otherwise return
+   * false.
+   */
+  def receivedMajority(tally: Set[ActorRef]): Boolean = {
+    world.config.states.foreach {
+      case Configuration(peers) if tally.size <= peers.size / 2 => return false
+      case _ => // do nothing
+    }
+    true
+  }
 
   onTransition {
     case transition @ _ -> Candidate =>
@@ -116,6 +126,8 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       val lastEntry = if (logEntries.isEmpty) InitialEntry else logEntries.last
       val vote = RequestVoteRPC(nextTerm, lastEntry.index, lastEntry.term)
       log.debug("we transition to candidate and cast vote {}", vote)
+      // FIXME: do we ignore peers which are leaving?
+      val peers = world.config.states.flatMap(_.peers)
       peers.foreach(_ ! vote)
       currentTerm = nextTerm
       votedFor = self
