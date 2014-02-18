@@ -59,17 +59,15 @@ extends Actor with ActorLogging {
     case MemberUp(member) =>
       if (!remoteProcessors.contains(member.address) && member.address != self.path.address) {
         val selection = context.actorSelection(self.path.toStringWithAddress(member.address))
-        selection ! Identify(member)
+        selection ! IdentifyProcessor
       }
 
-    case ActorIdentity(member: Member, Some(ref)) =>
-      if (ref != self) {
-        remoteProcessors = remoteProcessors + (member.address -> ref)
-        localProcessor ! Configuration(remoteProcessors.values.toSet)
-      }
+    case IdentifyProcessor =>
+      sender() ! ProcessorIdentity(localProcessor)
 
-    case ActorIdentity(member: Member, None) =>
-      log.warning("remote processor not found on member {}", member)
+    case ProcessorIdentity(ref) =>
+      remoteProcessors = remoteProcessors + (ref.path.address -> ref)
+      localProcessor ! Configuration(remoteProcessors.values.toSet + localProcessor)
 
     case MemberExited(member) =>
       log.info("member {} has exited", member)
@@ -79,7 +77,7 @@ extends Actor with ActorLogging {
 
     case MemberRemoved(member, previousStatus) =>
       remoteProcessors = remoteProcessors - member.address
-      localProcessor ! Configuration(remoteProcessors.values.toSet)
+      localProcessor ! Configuration(remoteProcessors.values.toSet + localProcessor)
 
      /* return RSM status */
     case RSMStatusQuery =>
@@ -166,10 +164,10 @@ extends Actor with ActorLogging {
         }
       }
 
-    /* forward internal messages to the processor */
-    case message: RaftProcessorMessage =>
-      localProcessor.forward(message)
-      //log.debug("forwarding message {} from {} to {}", message, sender().path, localProcessor)
+//    /* forward internal messages to the processor */
+//    case message: RaftProcessorMessage =>
+//      localProcessor.forward(message)
+//      //log.debug("forwarding message {} from {} to {}", message, sender().path, localProcessor)
   }
 }
 
@@ -182,8 +180,10 @@ object ReplicatedStateMachine {
     Props(classOf[ReplicatedStateMachine], monitor, minimumProcessors, electionTimeout, idleTimeout, maxEntriesBatch)
   }
 
-  case class Request(command: Command, caller: ActorRef)
   case object ReadCurrentClusterState
+  case object IdentifyProcessor
+  case class ProcessorIdentity(ref: ActorRef)
+  case class Request(command: Command, caller: ActorRef)
 }
 
 /**

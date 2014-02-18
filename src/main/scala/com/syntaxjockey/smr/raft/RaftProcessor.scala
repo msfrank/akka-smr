@@ -56,7 +56,7 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
   when(Initializing) {
 
     case Event(config: Configuration, Initializing(buffered)) =>
-      if (config.peers.size >= minimumProcessors - 1) {
+      if (config.peers.size >= minimumProcessors) {
         world = WorldState(world.version, world.namespaces, ConfigurationState(Vector(config)))
         log.debug("starting processing with peers:\n{}", config.peers.map("  " + _).mkString("\n"))
         // redeliver any buffered messages
@@ -72,7 +72,7 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
 
   initialize()
 
-  override val supervisorStrategy = OneForOneStrategy(maxNrOfRetries = 3, withinTimeRange = 1 minute) {
+  override val supervisorStrategy = OneForOneStrategy(maxNrOfRetries = 3, withinTimeRange = 1.minute) {
     case ex: Exception => Stop
   }
 }

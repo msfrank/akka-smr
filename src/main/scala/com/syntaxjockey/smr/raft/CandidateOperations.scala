@@ -101,6 +101,11 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       setTimer("election-timeout", ElectionTimeout, electionTimeout.nextDuration)
       goto(Candidate) using Candidate(Set.empty)
 
+    // forward notifications
+    case Event(notifications: NotificationMap, _) =>
+      monitor ! notifications
+      stay()
+
     // candidate doesn't do anything with a configuration
     case Event(config: Configuration, _) =>
       stay()

@@ -19,7 +19,7 @@ class ConfigurationSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with Implic
   def initialParticipants = roles.size
 
   "A ReplicatedStateMachine cluster" must {
-    val electionTimeout = RandomBoundedDuration(4500 milliseconds, 5000 milliseconds)
+    val electionTimeout = RandomBoundedDuration(4500.milliseconds, 5000.milliseconds)
     val idleTimeout = 2.seconds
     val maxEntriesBatch = 10
 
@@ -31,18 +31,18 @@ class ConfigurationSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with Implic
         for (_ <- 0.until(4)) { expectMsgClass(classOf[MemberUp]) }
         Cluster(system).unsubscribe(testActor, classOf[MemberUp])
         enterBarrier("startup-initial")
-        system.actorOf(ReplicatedStateMachine.props(self, roles.size - 1, electionTimeout, idleTimeout, maxEntriesBatch))
-        within(30 seconds) { expectMsg(SMRClusterReadyEvent) }
+        system.actorOf(ReplicatedStateMachine.props(self, roles.size - 1, electionTimeout, idleTimeout, maxEntriesBatch), "rsm")
+        within(30.seconds) { expectMsg(SMRClusterReadyEvent) }
         enterBarrier("finished-initial")
-        within(30 seconds) { expectMsg(SMRClusterChangedEvent) }
+        within(30.seconds) { expectMsg(SMRClusterChangedEvent) }
         enterBarrier("cluster-changed")
       }
       runOn(node5) {
         enterBarrier("startup-initial")
         enterBarrier("finished-initial")
         Cluster(system).join(node(node1).address)
-        system.actorOf(ReplicatedStateMachine.props(self, roles.size - 1, electionTimeout, idleTimeout, maxEntriesBatch))
-        within(30 seconds) { expectMsg(SMRClusterReadyEvent) }
+        system.actorOf(ReplicatedStateMachine.props(self, roles.size - 1, electionTimeout, idleTimeout, maxEntriesBatch), "rsm")
+        within(30.seconds) { expectMsg(SMRClusterReadyEvent) }
         enterBarrier("cluster-changed")
       }
     }

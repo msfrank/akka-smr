@@ -174,8 +174,8 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
           if (!notifications.isEmpty) {
             // FIXME: should probably send to followers, not peers, but followers contains the wrong ref
             // FIXME: do we send notification to all peers in the transitional state, or just the last state?
-            val peers = if (world.config.states.size == 1) world.config.states.head.peers else world.config.states.flatMap(_.peers)
-            peers.foreach { peer =>
+            val peers = if (world.config.states.size == 1) world.config.states.head.peers else world.config.states.flatMap(_.peers).toSet
+            ((peers - self) + monitor).foreach { peer =>
               log.debug("NOTIFY mutation generated events {}", notifications)
               peer ! NotificationMap(notifications)
             }

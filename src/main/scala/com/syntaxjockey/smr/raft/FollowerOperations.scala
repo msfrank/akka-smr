@@ -138,6 +138,11 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
       cancelTimer("follower-timeout")
       goto(Candidate) using Candidate(Set.empty)
 
+    // forward notifications
+    case Event(notifications: NotificationMap, _) =>
+      monitor ! notifications
+      stay()
+
     // we move to a transitional configuration
     case Event(config: Configuration, _) =>
       world = WorldState(world.version, world.namespaces, ConfigurationState(world.config.states :+ config))

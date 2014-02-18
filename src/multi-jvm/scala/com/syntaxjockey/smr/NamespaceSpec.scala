@@ -26,7 +26,7 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
   "A ReplicatedStateMachine cluster" must {
 
     val electionTimeout = RandomBoundedDuration(4500 milliseconds, 5000 milliseconds)
-    val idleTimeout = 2 seconds
+    val idleTimeout = 2.seconds
     val maxEntriesBatch = 10
     var rsm: ActorRef = ActorRef.noSender
 
