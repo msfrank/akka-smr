@@ -61,6 +61,8 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
         log.debug("starting processing with peers:\n{}", config.peers.map("  " + _).mkString("\n"))
         // redeliver any buffered messages
         buffered.foreach { case (msg,_sender) => self.tell(msg, _sender) }
+        // notify monitor that the cluster is ready
+        monitor ! SMRClusterReadyEvent
         goto(Follower) using Follower(None)
       } else stay()
 

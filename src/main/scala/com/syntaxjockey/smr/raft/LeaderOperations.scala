@@ -52,6 +52,9 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
     case Event(config: Configuration, Leader(followerStates, commitQueue)) =>
       world = WorldState(world.version, world.namespaces, ConfigurationState(world.config.states :+ config))
       self ! ConfigurationCommand(config)
+      log.debug("extended configuration =>\n{}",
+        world.config.states.map { "  state:\n" + _.peers.map("    " + _.path).mkString("\n") }.mkString("\n")
+      )
       // add configuration peers to followers map if they are not in the current followers map
       val addedStates = config.peers.filter { peer => !followerStates.contains(peer) }.map { follower =>
         val lastEntry = logEntries.lastOption.getOrElse(InitialEntry)
@@ -64,7 +67,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
       // remove followers from followers map if they are not in the latest configuration set
       val removedStates = followerStates.keys.filter { follower => !config.peers.contains(follower) }
       val currentStates = (followerStates -- removedStates) ++ addedStates
-      log.debug("merged configuration, followers set becomes:\n{}", currentStates.keys.map("  " + _).mkString("\n"))
+      log.debug("followers set becomes:\n{}", currentStates.keys.map("  " + _).mkString("\n"))
       stay() using Leader(currentStates, commitQueue)
 
     // synchronize peers which check in after transition to leader
@@ -182,6 +185,13 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
           }
           // respond to the caller with the command result
           caller ! CommandExecuted(logEntry, result)
+          // if configuration changed, then send event to monitor
+          if (logEntry.command.isInstanceOf[ConfigurationCommand]) {
+            monitor ! SMRClusterChangedEvent
+            log.debug("merged configuration =>\n{}",
+              updated.config.states.map { "  state:\n" + _.peers.map("    " + _.path).mkString("\n") }.mkString("\n")
+            )
+          }
         case Failure(ex) =>
           log.debug("EXEC {} failed: {}", logEntry.command, ex)
           logEntry.caller ! CommandExecuted(logEntry, new CommandFailed(ex, logEntry.command))

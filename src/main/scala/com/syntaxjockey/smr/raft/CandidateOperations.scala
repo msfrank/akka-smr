@@ -75,8 +75,9 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       val votesReceived = if (voteGranted && candidateTerm == currentTerm) currentTally + sender else currentTally
       // if we have received a majority of votes, then become leader
       if (receivedMajority(votesReceived)) {
+        val peers = world.config.states.flatMap(_.peers).toSet - self
         val lastEntry = logEntries.lastOption.getOrElse(InitialEntry)
-        val followerStates = votesReceived.map { follower =>
+        val followerStates = peers.map { follower =>
           follower -> FollowerState(follower, lastEntry.index + 1, 0, None, None)
         }.toMap
         cancelTimer("election-timeout")
@@ -132,7 +133,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       val vote = RequestVoteRPC(nextTerm, lastEntry.index, lastEntry.term)
       log.debug("we transition to candidate and cast vote {}", vote)
       // FIXME: do we ignore peers which are leaving?
-      val peers = world.config.states.flatMap(_.peers)
+      val peers = world.config.states.flatMap(_.peers).toSet - self
       peers.foreach(_ ! vote)
       currentTerm = nextTerm
       votedFor = self

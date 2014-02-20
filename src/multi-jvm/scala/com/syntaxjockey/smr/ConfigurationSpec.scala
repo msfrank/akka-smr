@@ -35,7 +35,7 @@ class ConfigurationSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with Implic
         within(30.seconds) { expectMsg(SMRClusterReadyEvent) }
         enterBarrier("finished-initial")
         within(30.seconds) { expectMsg(SMRClusterChangedEvent) }
-        enterBarrier("cluster-changed")
+        enterBarrier("added-processor")
       }
       runOn(node5) {
         enterBarrier("startup-initial")
@@ -43,7 +43,7 @@ class ConfigurationSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with Implic
         Cluster(system).join(node(node1).address)
         system.actorOf(ReplicatedStateMachine.props(self, roles.size - 1, electionTimeout, idleTimeout, maxEntriesBatch), "rsm")
         within(30.seconds) { expectMsg(SMRClusterReadyEvent) }
-        enterBarrier("cluster-changed")
+        enterBarrier("added-processor")
       }
     }
   }

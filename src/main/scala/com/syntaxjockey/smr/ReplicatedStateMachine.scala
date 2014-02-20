@@ -91,10 +91,8 @@ extends Actor with ActorLogging {
       log.debug("processor transitions from {} to {}", prevState, newState)
 
     case LeaderElectionEvent(newLeader, term) =>
-      val initialized = leader.isDefined
+      // FIXME: this logic seems outdated, need to revisit
       leader = if (newLeader == localProcessor) Some(self) else Some(remoteProcessors(newLeader.path.address))
-      if (!initialized)
-        monitor ! SMRClusterReadyEvent
       if (!buffered.isEmpty && inflight.isEmpty) {
         val request = buffered.head
         leader.get ! request.command
@@ -102,6 +100,10 @@ extends Actor with ActorLogging {
         buffered = buffered.tail
       }
       log.debug("processor {} is now leader for term {}", newLeader.path, term)
+
+    case event: SMREvent =>
+      log.debug("received {}", event)
+      monitor ! event
 
     /*
      * Command protocol:

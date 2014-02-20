@@ -100,7 +100,9 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
               appendEntries.entries.foreach {
                 case LogEntry(command: ConfigurationCommand, _, _, _) =>
                   world = WorldState(world.version, world.namespaces, ConfigurationState(world.config.states :+ command.config))
-                  log.debug("merged configuration, peers set becomes:\n{}", command.config.peers.map("  " + _).mkString("\n"))
+                  log.debug("extended configuration =>\n{}",
+                    world.config.states.map { "  state:\n" + _.peers.map("    " + _.path).mkString("\n") }.mkString("\n")
+                  )
                 case _ => // do nothing
               }
             }
@@ -110,7 +112,13 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
               world = logEntries.slice(commitIndex + 1, updatedIndex + 1).foldLeft(world) { case (acc, logEntry: LogEntry) =>
                 logEntry.command.apply(acc) match {
                   case Success(WorldStateResult(updated, _, _)) =>
-                    if (logEntry.command.isInstanceOf[ConfigurationCommand]) { monitor ! SMRClusterChangedEvent }
+                    // if configuration changed, then send event to monitor
+                    if (logEntry.command.isInstanceOf[ConfigurationCommand]) {
+                      monitor ! SMRClusterChangedEvent
+                      log.debug("merged configuration =>\n{}",
+                        updated.config.states.map { "  state:\n" + _.peers.map("    " + _.path).mkString("\n") }.mkString("\n")
+                      )
+                    }
                     updated
                   case Failure(ex) => acc
                 }
@@ -143,9 +151,8 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
       monitor ! notifications
       stay()
 
-    // we move to a transitional configuration
+    // follower doesn't do anything with a configuration
     case Event(config: Configuration, _) =>
-      world = WorldState(world.version, world.namespaces, ConfigurationState(world.config.states :+ config))
       stay()
   }
 
