@@ -6,7 +6,7 @@ import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 object AkkaSmrBuild extends Build {
 
   val projectVersion = "0.0.1"
-  val akkaVersion = "2.3.0-RC3"
+  val akkaVersion = "2.3.0-RC4"
 
   lazy val akkaSmrBuild = Project(
     id = "akka-smr",
