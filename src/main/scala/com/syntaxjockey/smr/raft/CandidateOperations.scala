@@ -1,10 +1,10 @@
 package com.syntaxjockey.smr.raft
 
-import akka.actor.{LoggingFSM, Actor, ActorRef}
+import akka.actor._
 import scala.concurrent.ExecutionContext
 
 import com.syntaxjockey.smr.raft.RaftProcessor._
-import com.syntaxjockey.smr.{ConfigurationState, WorldState, Configuration, Command}
+import com.syntaxjockey.smr.{WorldState, Configuration, Command}
 
 /*
  * "[Candidate state] is used to elect a new leader ... If a candidate wins the
@@ -12,7 +12,7 @@ import com.syntaxjockey.smr.{ConfigurationState, WorldState, Configuration, Comm
  * an election will result in a split vote. In this case the term will end with
  * no leader; a new term (with a new election) will begin shortly."
  */
-trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,ProcessorData] {
+trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,ProcessorData] with Stash {
 
   implicit val ec: ExecutionContext
 
@@ -81,6 +81,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
           follower -> FollowerState(follower, lastEntry.index + 1, 0, None, None)
         }.toMap
         cancelTimer("election-timeout")
+        unstashAll()  // we can process commands now that a leader is elected
         goto(Leader) using Leader(followerStates, Vector.empty)
       } else stay() using Candidate(votesReceived)
 
@@ -91,11 +92,14 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
         currentTerm = appendEntries.term
         self forward appendEntries  // reinject message for processing in Follower state
         cancelTimer("election-timeout")
+        unstashAll()  // we can process commands now that a leader is elected
         goto(Follower) using Follower(Some(sender()))
       } else stay() replying LeaderTermExpired(currentTerm)
 
     case Event(command: Command, _) =>
-      stay() replying RetryCommand(command)
+      // there is no leader, so stash the command until a leader is elected
+      try { stash() } catch { case ex: StashOverflowException => sender() ! CommandRejected(command) }
+      stay()
 
     case Event(ElectionTimeout, _) =>
       log.debug("election had no result")

@@ -29,7 +29,7 @@ class RaftProcessor(val monitor: ActorRef,
                     val electionTimeout: RandomBoundedDuration,
                     val idleTimeout: FiniteDuration,
                     val maxEntriesBatch: Int)
-extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperations with CandidateOperations with LeaderOperations {
+extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperations with CandidateOperations with LeaderOperations with Stash {
   import RaftProcessor._
   import SupervisorStrategy.Stop
 
@@ -145,10 +145,11 @@ case class CommandRequest(logEntry: LogEntry)
 
 // events
 sealed trait RaftProcessorEvent
+case class CommandRejected(command: Command) extends RaftProcessorEvent
 case class CommandAccepted(logEntry: LogEntry) extends RaftProcessorEvent
 case class CommandExecuted(logEntry: LogEntry, result: Result) extends RaftProcessorEvent
 case class CommandApplied(logEntry: LogEntry) extends RaftProcessorEvent
-case class NotificationMap(notifications: Map[NamespacePath,Notification])
-case class RetryCommand(command: Command) extends RaftProcessorEvent
 case class ProcessorTransitionEvent(prevState: ProcessorState, newState: ProcessorState) extends RaftProcessorEvent
 case class LeaderElectionEvent(leader: ActorRef, term: Int) extends RaftProcessorEvent
+
+case class NotificationMap(notifications: Map[NamespacePath,Notification])

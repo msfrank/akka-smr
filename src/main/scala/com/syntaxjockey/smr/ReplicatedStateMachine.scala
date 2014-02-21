@@ -1,15 +1,13 @@
 package com.syntaxjockey.smr
 
 import akka.actor._
-import akka.cluster.{Cluster, Member}
+import akka.cluster.Cluster
 import akka.cluster.ClusterEvent._
 import scala.concurrent.duration._
 import scala.collection.SortedSet
-import scala.util.{Random, Failure, Success}
-import java.util.concurrent.TimeUnit
 
 import com.syntaxjockey.smr.raft._
-import com.syntaxjockey.smr.namespace.{NamespacePath, Path}
+import com.syntaxjockey.smr.namespace.NamespacePath
 
 /**
  * Proxy actor for coordinating RaftProcessors in a cluster.
@@ -40,7 +38,7 @@ extends Actor with ActorLogging {
   Cluster(context.system).subscribe(self, InitialStateAsEvents, classOf[MemberEvent])
 
   // read current state every 5 minutes
-  context.system.scheduler.schedule(5.minutes, 5.minutes, self, ReadCurrentClusterState)
+  val readClusterState = context.system.scheduler.schedule(5.minutes, 5.minutes, self, ReadCurrentClusterState)
 
   def receive = {
 
@@ -57,15 +55,17 @@ extends Actor with ActorLogging {
       }
 
     case MemberUp(member) =>
-      if (!remoteProcessors.contains(member.address) && member.address != self.path.address) {
+      if (!remoteProcessors.contains(member.address) && member.address != Cluster(context.system).selfAddress) {
         val selection = context.actorSelection(self.path.toStringWithAddress(member.address))
         selection ! IdentifyProcessor
+        log.debug("member {} is up", member)
       }
 
     case IdentifyProcessor =>
       sender() ! ProcessorIdentity(localProcessor)
 
     case ProcessorIdentity(ref) =>
+      log.debug("found remote processor {}", ref.path)
       remoteProcessors = remoteProcessors + (ref.path.address -> ref)
       localProcessor ! Configuration(remoteProcessors.values.toSet + localProcessor)
 
@@ -76,8 +76,23 @@ extends Actor with ActorLogging {
       log.warning("member {} detected as unreachable", member)
 
     case MemberRemoved(member, previousStatus) =>
-      remoteProcessors = remoteProcessors - member.address
-      localProcessor ! Configuration(remoteProcessors.values.toSet + localProcessor)
+      if (member.address == Cluster(context.system).selfAddress) {
+        localProcessor ! PoisonPill
+        remoteProcessors = Map.empty
+        leader = None
+        // FIXME: send replies to any actors waiting for a response
+        inflight = None
+        buffered = Vector.empty
+        accepted = Vector.empty
+        watches = Map.empty
+        readClusterState.cancel()
+        // FIXME: move to a shutdown state, reject commands
+        // FIXME: convert into a client, so we can still process commands?
+      } else {
+        remoteProcessors = remoteProcessors - member.address
+        localProcessor ! Configuration(remoteProcessors.values.toSet + localProcessor)
+        log.info("member {} was removed", member)
+      }
 
      /* return RSM status */
     case RSMStatusQuery =>
@@ -129,8 +144,24 @@ extends Actor with ActorLogging {
         log.debug("COMMAND {} buffered", command)
       }
 
-    case RetryCommand(command: Command) =>
-      log.error("command {} must be retried", command)
+    case rejected @ CommandRejected(command) =>
+      inflight match {
+        case Some(request) =>
+          accepted = accepted :+ request
+          inflight = None
+          log.debug("COMMAND {} was rejected", command)
+          request.caller ! rejected
+        case None =>
+          log.error("COMMAND {} was rejected but is not currently in-flight", command)
+      }
+      buffered.headOption match {
+        case Some(request) =>
+          localProcessor ! request.command
+          inflight = Some(request)
+          buffered = buffered.tail
+          log.debug("COMMAND {} submitted", request.command)
+        case None => // do nothing
+      }
 
     case CommandAccepted(logEntry) =>
       inflight match {

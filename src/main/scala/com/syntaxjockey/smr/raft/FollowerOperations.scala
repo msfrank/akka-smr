@@ -1,6 +1,6 @@
 package com.syntaxjockey.smr.raft
 
-import akka.actor.{ActorRef, LoggingFSM, Actor}
+import akka.actor._
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 
@@ -12,7 +12,7 @@ import com.syntaxjockey.smr._
  * from leaders and candidates. The leader handles all client requests (if a client
  * contacts a follower, the follower redirects it to the leader)."
  */
-trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorData] {
+trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorData] with Stash {
 
   implicit val ec: ExecutionContext
 
@@ -64,7 +64,8 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
           leader forward command
           log.debug("forwarding {} to {}", command, leader.path)
         case None =>
-          sender() ! RetryCommand(command)
+          // there is no leader, so stash the command until a leader is elected
+          try { stash() } catch { case ex: StashOverflowException => sender() ! CommandRejected(command) }
       }
       stay()
 
@@ -137,6 +138,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
           case Some(leader) if leader != sender() => monitor ! LeaderElectionEvent(sender(), currentTerm)
           case _ => // do nothing
         }
+        unstashAll()  // we can process commands now that a leader is elected
         stay() replying result using Follower(Some(sender()))
       }
       else stay() replying LeaderTermExpired(currentTerm)

@@ -1,7 +1,7 @@
 package com.syntaxjockey.smr
 
 import akka.actor.ActorRef
-import scala.util.{Failure, Try}
+import scala.util.{Success, Failure, Try}
 
 import com.syntaxjockey.smr.namespace.{NamespacePath, Path}
 
@@ -31,3 +31,17 @@ class CommandFailed(cause: Throwable, val command: Command) extends Exception("C
  * any notification side-effects.
  */
 case class WorldStateResult(world: WorldState, result: Result, notifications: Map[NamespacePath,Notification] = Map.empty)
+
+/**
+ * Ping command, simply returns PongResult.  This is useful for testing that
+ * the cluster is available and processing commands.  The correlationId is
+ * optional, but if specified is returned in the PongResult.
+ */
+case class PingCommand(correlationId: Option[Any] = None) extends Command {
+  def apply(world: WorldState): Try[WorldStateResult] = Success(WorldStateResult(world, PongResult(correlationId)))
+}
+
+/**
+ * The result of a PingCommand.
+ */
+case class PongResult(correlationId: Option[Any]) extends Result
