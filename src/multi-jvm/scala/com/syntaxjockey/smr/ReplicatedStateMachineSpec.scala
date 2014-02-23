@@ -30,7 +30,7 @@ class ReplicatedStateMachineSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) wi
       Cluster(system).join(node(node1).address)
       for (_ <- 0.until(roles.size)) { expectMsgClass(classOf[MemberUp]) }
       enterBarrier("startup")
-      system.actorOf(ReplicatedStateMachine.props(self, roles.size, electionTimeout, idleTimeout, maxEntriesBatch), "rsm")
+      system.actorOf(ReplicatedStateMachine.props(self, roles.size, None, electionTimeout, idleTimeout, maxEntriesBatch), "rsm")
       within(30 seconds) { expectMsg(SMRClusterReadyEvent) }
       enterBarrier("finished")
     }

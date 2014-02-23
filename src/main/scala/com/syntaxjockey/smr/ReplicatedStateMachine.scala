@@ -14,6 +14,7 @@ import com.syntaxjockey.smr.namespace.NamespacePath
  */
 class ReplicatedStateMachine(monitor: ActorRef,
                              minimumProcessors: Int,
+                             processorRole: Option[String],
                              electionTimeout: RandomBoundedDuration,
                              idleTimeout: FiniteDuration,
                              maxEntriesBatch: Int)
@@ -55,7 +56,9 @@ extends Actor with ActorLogging {
       }
 
     case MemberUp(member) =>
-      if (!remoteProcessors.contains(member.address) && member.address != Cluster(context.system).selfAddress) {
+      if (!remoteProcessors.contains(member.address) &&
+        member.address != Cluster(context.system).selfAddress &&
+        (processorRole.isEmpty || member.hasRole(processorRole.get))) {
         val selection = context.actorSelection(self.path.toStringWithAddress(member.address))
         selection ! IdentifyProcessor
         log.debug("member {} is up", member)
@@ -207,10 +210,11 @@ extends Actor with ActorLogging {
 object ReplicatedStateMachine {
   def props(monitor: ActorRef,
             minimumProcessors: Int,
+            processorRole: Option[String],
             electionTimeout: RandomBoundedDuration,
             idleTimeout: FiniteDuration,
             maxEntriesBatch: Int) = {
-    Props(classOf[ReplicatedStateMachine], monitor, minimumProcessors, electionTimeout, idleTimeout, maxEntriesBatch)
+    Props(classOf[ReplicatedStateMachine], monitor, minimumProcessors, processorRole, electionTimeout, idleTimeout, maxEntriesBatch)
   }
 
   case object ReadCurrentClusterState

@@ -25,7 +25,8 @@ class SMREventStream extends Actor {
  */
 class SMRExtensionImpl(system: ActorSystem) extends Extension {
   val config = system.settings.config.getConfig("akka.smr")
-  val smrName = config.getString("smr-name")
+  val smrName = if (config.hasPath("smr-name")) config.getString("smr-name") else "akka-smr"
+  val processorRole = if (config.hasPath("processor-role")) Some(config.getString("processor-role")) else None
   val minimumNrProcessors = config.getInt("minimum-nr-processors")
   val electionTimeout = config.getDuration("election-timeout", TimeUnit.MILLISECONDS)
   val electionTimeoutVariance = config.getDuration("election-timeout-variance", TimeUnit.MILLISECONDS)
@@ -37,7 +38,7 @@ class SMRExtensionImpl(system: ActorSystem) extends Extension {
     val upperBound = FiniteDuration(electionTimeout + electionTimeoutVariance, TimeUnit.MILLISECONDS)
     val _electionTimeout = RandomBoundedDuration(lowerBound, upperBound)
     val _idleTimeout = FiniteDuration(idleTimeout, TimeUnit.MILLISECONDS)
-    system.actorOf(ReplicatedStateMachine.props(eventStream, minimumNrProcessors, _electionTimeout, _idleTimeout, maxEntriesBatch), smrName)
+    system.actorOf(ReplicatedStateMachine.props(eventStream, minimumNrProcessors, processorRole, _electionTimeout, _idleTimeout, maxEntriesBatch), smrName)
   }
 }
 

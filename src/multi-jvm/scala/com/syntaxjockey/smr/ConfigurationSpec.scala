@@ -33,7 +33,7 @@ class ConfigurationSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with Implic
         for (_ <- 0.until(4)) { expectMsgClass(classOf[MemberUp]) }
         Cluster(system).unsubscribe(testActor, classOf[MemberUp])
         enterBarrier("startup-initial")
-        rsm = system.actorOf(ReplicatedStateMachine.props(self, roles.size - 1, electionTimeout, idleTimeout, maxEntriesBatch), "rsm")
+        rsm = system.actorOf(ReplicatedStateMachine.props(self, roles.size - 1, None, electionTimeout, idleTimeout, maxEntriesBatch), "rsm")
         within(30.seconds) { expectMsg(SMRClusterReadyEvent) }
         rsm ! PingCommand(Some("%s 1".format(myself.name)))
         within(30.seconds) { expectMsgClass(classOf[PongResult]) }
@@ -45,7 +45,7 @@ class ConfigurationSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with Implic
         enterBarrier("startup-initial")
         enterBarrier("finished-initial")
         Cluster(system).join(node(node1).address)
-        rsm = system.actorOf(ReplicatedStateMachine.props(self, roles.size - 1, electionTimeout, idleTimeout, maxEntriesBatch), "rsm")
+        rsm = system.actorOf(ReplicatedStateMachine.props(self, roles.size - 1, None, electionTimeout, idleTimeout, maxEntriesBatch), "rsm")
         within(30.seconds) { expectMsg(SMRClusterReadyEvent) }
         rsm ! PingCommand(Some("%s 1".format(myself.name)))
         within(30.seconds) { expectMsgClass(classOf[PongResult]) }
