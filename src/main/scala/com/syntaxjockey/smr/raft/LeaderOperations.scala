@@ -21,6 +21,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
   val electionTimeout: RandomBoundedDuration
   val idleTimeout: FiniteDuration
   val maxEntriesBatch: Int
+  val minimumProcessors: Int
 
   // persistent server state
   var currentTerm: Int
@@ -47,6 +48,10 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
         case entry => entry
       }
       stay() using Leader(updatedStates, commitQueue)
+
+    // if cluster size drops below minimumProcessors, move to Incubating
+    case Event(config: Configuration, _) if config.peers.size < minimumProcessors =>
+      goto(Incubating) using NoData
 
     // we move to a transitional configuration
     case Event(config: Configuration, Leader(followerStates, commitQueue)) =>
@@ -183,14 +188,18 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
               peer ! NotificationMap(notifications)
             }
           }
-          // respond to the caller with the command result
-          caller ! CommandExecuted(logEntry, result)
-          // if configuration changed, then send event to monitor
-          if (logEntry.command.isInstanceOf[ConfigurationCommand]) {
-            monitor ! SMRClusterChangedEvent
-            log.debug("merged configuration =>\n{}",
-              updated.config.states.map { "  state:\n" + _.peers.map("    " + _.path).mkString("\n") }.mkString("\n")
-            )
+          logEntry.command match {
+            // if configuration changed, then send event to monitor
+            case ConfigurationCommand(config) =>
+              log.debug("merged configuration =>\n{}",
+                updated.config.states.map { "  state:\n" + _.peers.map("    " + _.path).mkString("\n") }.mkString("\n")
+              )
+              // FIXME: what if peer has gone away and returned?
+              if (config.peers.contains(self))
+                monitor ! SMRClusterChangedEvent
+            // otherwise respond to the caller with the command result
+            case _ =>
+              caller ! CommandExecuted(logEntry, result)
           }
         case Failure(ex) =>
           log.debug("EXEC {} failed: {}", logEntry.command, ex)

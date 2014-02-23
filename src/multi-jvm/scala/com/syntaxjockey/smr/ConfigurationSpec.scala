@@ -68,5 +68,28 @@ class ConfigurationSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with Implic
         enterBarrier("removed-processor")
       }
     }
+
+    "detect when cluster size shrinks below minimumProcessors" in {
+      enterBarrier("starting-3")
+      runOn(node3) {
+        Cluster(system).subscribe(testActor, classOf[MemberRemoved])
+        Cluster(system).leave(node(node3).address)
+        //within(30.seconds) { expectMsgClass(classOf[MemberRemoved]) }
+        enterBarrier("cluster-lost")
+      }
+      runOn(node2) {
+        enterBarrier("cluster-lost")
+      }
+      runOn(node1, node4) {
+        within(60.seconds) { expectMsg(SMRClusterLostEvent) }
+        enterBarrier("cluster-lost")
+      }
+      // FIXME: node5 shouldn't receive a second cluster changed event
+      runOn(node5) {
+        within(60.seconds) { expectMsg(SMRClusterChangedEvent) }
+        within(60.seconds) { expectMsg(SMRClusterLostEvent) }
+        enterBarrier("cluster-lost")
+      }
+    }
   }
 }

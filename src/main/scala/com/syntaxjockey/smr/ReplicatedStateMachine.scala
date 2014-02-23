@@ -44,7 +44,20 @@ extends Actor with ActorLogging {
   def receive = {
 
     /*
-     * Processor discovery protocol:
+     * Processor discovery/configuration protocol:
+     *  1. We subscribe to cluster MemberEvent messages.
+     *  2. When a MemberUp message is received, if the member is not this actor system, we have
+     *     not seen the member before, and optionally if the member has the appropriate cluster
+     *     role, then we send the IdentifyProcessor message to the remote actor system.  we use
+     *     the same actor path as this actor.
+     *  3. On the remote side, if there is a ReplicatedStateMachine actor at the specified path,
+     *     then it replies with a ProcessorIdentity message containing the actor ref for the
+     *     RaftProcessor actor.
+     *  4. If the remote actor system does not have a ReplicatedStateMachine listening, or there
+     *     is some other network error causing the message to be lost, then we never receive a
+     *     ProcessorIdentity message back.  To handle this case, we read the entire cluster state
+     *     every 5 minutes, and perform the same steps for any member found.  These retries happen
+     *     indefinitely.
      */
     case ReadCurrentClusterState =>
       clusterState = Cluster(context.system).state

@@ -46,34 +46,44 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
 
   var world: WorldState = WorldState.void
 
-  startWith(Initializing, Initializing(Vector.empty))
+  startWith(Incubating, NoData)
 
   /*
-   * Initializing is a special state not described in the Raft paper.  the RaftProcessor
-   * FSM starts in Initializing and waits for a StartProcessing message. Once received,
-   * the FSM moves to Follower state and never transitions to Initializing again.
+   * Incubating is a special state not described in the Raft paper.  the RaftProcessor
+   * FSM starts in Incubating and waits for the cluster to contain the minimum specified
+   * number of processors, then transitions to Follower.  If the cluster shrinks below
+   * minimumProcessors, we go back to Incubating state.
    */
-  when(Initializing) {
+  when(Incubating) {
 
-    case Event(config: Configuration, Initializing(buffered)) =>
+    case Event(config: Configuration, NoData) =>
       if (config.peers.size >= minimumProcessors) {
         world = WorldState(world.version, world.namespaces, ConfigurationState(Vector(config)))
         log.debug("starting processing with peers:\n{}", config.peers.map("  " + _).mkString("\n"))
         // redeliver any buffered messages
-        buffered.foreach { case (msg,_sender) => self.tell(msg, _sender) }
+        unstashAll()
         // notify monitor that the cluster is ready
         monitor ! SMRClusterReadyEvent
         goto(Follower) using Follower(None)
       } else stay()
 
-    case Event(msg, Initializing(buffered)) =>
+    case Event(msg, NoData) =>
       log.debug("buffering message {}", msg)
-      // FIXME: use stash() instead
-      stay() using Initializing(buffered :+ msg -> sender)
+      // stash anything other than a Configuration message, we can't handle it yet
+      // if stash fails due to mailbox overflow, we should let supervision handle it
+      stash()
+      stay()
   }
 
+  onTransition {
+    case _ -> Incubating =>
+      monitor ! SMRClusterLostEvent
+  }
+  
+  // start the FSM
   initialize()
 
+  // FIXME: i'm sure we can be smarter than this...
   override val supervisorStrategy = OneForOneStrategy(maxNrOfRetries = 3, withinTimeRange = 1.minute) {
     case ex: Exception => Stop
   }
@@ -100,14 +110,14 @@ object RaftProcessor {
 
   // FSM state
   sealed trait ProcessorState
-  case object Initializing extends ProcessorState
+  case object Incubating extends ProcessorState
   case object Follower extends ProcessorState
   case object Candidate extends ProcessorState
   case object Leader extends ProcessorState
 
   // FSM data
   sealed trait ProcessorData
-  case class Initializing(buffered: Vector[(Any,ActorRef)]) extends ProcessorData
+  case object NoData extends ProcessorData
   case class Follower(leader: Option[ActorRef]) extends ProcessorData
   case class Candidate(votesReceived: Set[ActorRef]) extends ProcessorData
   case class Leader(followerStates: Map[ActorRef,FollowerState], commitQueue: Vector[LogEntry]) extends ProcessorData

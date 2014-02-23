@@ -19,6 +19,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
   // configuration
   val monitor: ActorRef
   val electionTimeout: RandomBoundedDuration
+  val minimumProcessors: Int
 
   // persistent server state
   var currentTerm: Int
@@ -111,9 +112,9 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       monitor ! notifications
       stay()
 
-    // candidate doesn't do anything with a configuration
+    // if cluster size drops below minimumProcessors, move to Incubating
     case Event(config: Configuration, _) =>
-      stay()
+      if (config.peers.size < minimumProcessors) goto(Incubating) using NoData else stay()
   }
 
   /**

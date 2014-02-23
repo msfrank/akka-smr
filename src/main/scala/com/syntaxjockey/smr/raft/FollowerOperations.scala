@@ -19,6 +19,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
   // configuration
   val monitor: ActorRef
   val electionTimeout: RandomBoundedDuration
+  val minimumProcessors: Int
 
   // persistent server state
   var currentTerm: Int
@@ -110,19 +111,24 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
             // update commitIndex and apply any outstanding commands
             if (appendEntries.leaderCommit > commitIndex) {
               val updatedIndex = math.min(appendEntries.leaderCommit, logEntries.last.index)
-              world = logEntries.slice(commitIndex + 1, updatedIndex + 1).foldLeft(world) { case (acc, logEntry: LogEntry) =>
-                logEntry.command.apply(acc) match {
+              world = logEntries.slice(commitIndex + 1, updatedIndex + 1).foldLeft(world) {
+                // special case: command is a ConfigurationCommand
+                case (acc, LogEntry(command: ConfigurationCommand, _, _, _)) =>
+                  command.apply(acc) match {
                   case Success(WorldStateResult(updated, _, _)) =>
-                    // if configuration changed, then send event to monitor
-                    if (logEntry.command.isInstanceOf[ConfigurationCommand]) {
-                      monitor ! SMRClusterChangedEvent
+                      if (command.config.peers.contains(self))
+                        monitor ! SMRClusterChangedEvent
                       log.debug("merged configuration =>\n{}",
                         updated.config.states.map { "  state:\n" + _.peers.map("    " + _.path).mkString("\n") }.mkString("\n")
                       )
-                    }
-                    updated
-                  case Failure(ex) => acc
-                }
+                      updated
+                    case Failure(ex) => acc
+                  }
+                case (acc, logEntry: LogEntry) =>
+                  logEntry.command.apply(acc) match {
+                    case Success(WorldStateResult(updated, _, _)) => updated
+                    case Failure(ex) => acc
+                  }
               }
               commitIndex = updatedIndex
               log.debug("committed up to {}", commitIndex)
@@ -153,9 +159,9 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
       monitor ! notifications
       stay()
 
-    // follower doesn't do anything with a configuration
+    // if cluster size drops below minimumProcessors, move to Incubating
     case Event(config: Configuration, _) =>
-      stay()
+      if (config.peers.size < minimumProcessors) goto(Incubating) using NoData else stay()
   }
 
   onTransition {
