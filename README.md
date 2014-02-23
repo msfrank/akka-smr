@@ -1,4 +1,4 @@
-akka-smr
+akka-smr [![Build Status](https://travis-ci.org/msfrank/akka-smr.png?branch=master)](https://travis-ci.org/msfrank/akka-smr)
 ========
 
 Akka-smr is a state-machine replication library built on top of the [Akka](http://akka.io) framework.
