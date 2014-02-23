@@ -3,6 +3,7 @@ package com.syntaxjockey.smr
 import scala.util.{Success, Failure, Try}
 
 import com.syntaxjockey.smr.namespace.NamespacePath
+import com.syntaxjockey.smr.world.WorldState
 
 /**
  * Wraps one ore more mutation commands in a transaction, so either all of the mutations

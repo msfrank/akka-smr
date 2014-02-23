@@ -8,6 +8,7 @@ import scala.util.{Try,Success}
 import com.syntaxjockey.smr.raft.RaftProcessor.{ProcessorState, ProcessorData}
 import com.syntaxjockey.smr._
 import com.syntaxjockey.smr.namespace.NamespacePath
+import com.syntaxjockey.smr.world.WorldState
 
 /**
  * marker trait to identify raft processor messages

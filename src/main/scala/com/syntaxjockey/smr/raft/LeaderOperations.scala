@@ -7,6 +7,7 @@ import scala.util.{Success,Failure}
 
 import com.syntaxjockey.smr._
 import RaftProcessor._
+import com.syntaxjockey.smr.world.WorldState
 
 /*
  * "The leader accepts log entries from clients, replicates them on other servers,

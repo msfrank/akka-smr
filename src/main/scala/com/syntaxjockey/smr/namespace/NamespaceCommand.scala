@@ -2,6 +2,7 @@ package com.syntaxjockey.smr.namespace
 
 import com.syntaxjockey.smr._
 import scala.util.{Failure, Success, Try}
+import com.syntaxjockey.smr.world.WorldState
 
 sealed trait NamespaceCommand extends Command
 

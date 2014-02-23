@@ -1,7 +1,8 @@
-package com.syntaxjockey.smr
+package com.syntaxjockey.smr.world
 
 import com.syntaxjockey.smr.namespace.Namespace
 import scala.util.{Success, Try}
+import com.syntaxjockey.smr.{Result, Command, ConfigurationState}
 
 /**
  * Contains the state of the entire world.  Every state machine operation takes
@@ -16,18 +17,4 @@ object WorldState {
    */
   val void = WorldState(0, Map.empty, ConfigurationState(Vector.empty))
 }
-
-/**
- * Command to retrieve the entire world state.  Beware, a large world state may run
- * afoul of akka-remote message size limitations!
- */
-case object GetWorldState extends Command {
-  def apply(world: WorldState): Try[WorldStateResult] = Success(WorldStateResult(world, GetWorldStateResult(world), Map.empty))
-}
-
-/**
- * Contains the entire world state at some point in the recent past.
- */
-case class GetWorldStateResult(world: WorldState) extends Result
-
 

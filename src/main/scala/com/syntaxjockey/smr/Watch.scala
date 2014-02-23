@@ -4,6 +4,7 @@ import akka.actor.{ActorContext, ActorRef}
 import scala.util.{Success, Try}
 
 import com.syntaxjockey.smr.namespace.NamespacePath
+import com.syntaxjockey.smr.world.WorldState
 
 /**
  * A command which can be watched.

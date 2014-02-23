@@ -6,6 +6,7 @@ import scala.util.{Failure, Success}
 
 import com.syntaxjockey.smr.raft.RaftProcessor._
 import com.syntaxjockey.smr._
+import com.syntaxjockey.smr.world.WorldState
 
 /*
  * "Followers are passive: they issue no RPCs on their own but simply respond to RPCs

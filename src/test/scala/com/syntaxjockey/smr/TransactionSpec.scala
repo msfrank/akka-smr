@@ -8,6 +8,7 @@ import scala.util.{Success, Failure}
 
 import com.syntaxjockey.smr.namespace._
 import com.syntaxjockey.smr.namespace.PathConversions._
+import com.syntaxjockey.smr.world.WorldState
 
 class TransactionSpec extends WordSpec with MustMatchers {
 

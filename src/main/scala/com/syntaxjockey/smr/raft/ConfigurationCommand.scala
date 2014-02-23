@@ -3,6 +3,7 @@ package com.syntaxjockey.smr.raft
 import scala.util.{Failure, Success, Try}
 
 import com.syntaxjockey.smr._
+import com.syntaxjockey.smr.world.WorldState
 
 /**
  *

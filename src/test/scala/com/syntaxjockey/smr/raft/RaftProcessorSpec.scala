@@ -8,7 +8,8 @@ import com.typesafe.config.ConfigFactory
 import scala.concurrent.duration._
 import scala.util.Success
 
-import com.syntaxjockey.smr.{Configuration, WorldStateResult, WorldState}
+import com.syntaxjockey.smr.{Configuration, WorldStateResult}
+import com.syntaxjockey.smr.world.WorldState
 
 class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpecLike with MustMatchers with BeforeAndAfterAll {
   import RaftProcessor._

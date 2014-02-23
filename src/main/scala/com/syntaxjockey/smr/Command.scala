@@ -1,9 +1,9 @@
 package com.syntaxjockey.smr
 
-import akka.actor.ActorRef
-import scala.util.{Success, Failure, Try}
+import scala.util.{Success, Try}
 
-import com.syntaxjockey.smr.namespace.{NamespacePath, Path}
+import com.syntaxjockey.smr.namespace.NamespacePath
+import com.syntaxjockey.smr.world.WorldState
 
 /**
  *  marker trait for a command operation.

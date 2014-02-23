@@ -4,7 +4,8 @@ import akka.actor._
 import scala.concurrent.ExecutionContext
 
 import com.syntaxjockey.smr.raft.RaftProcessor._
-import com.syntaxjockey.smr.{WorldState, Configuration, Command}
+import com.syntaxjockey.smr.{Configuration, Command}
+import com.syntaxjockey.smr.world.WorldState
 
 /*
  * "[Candidate state] is used to elect a new leader ... If a candidate wins the

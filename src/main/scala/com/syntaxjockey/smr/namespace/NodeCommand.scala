@@ -5,6 +5,7 @@ import org.joda.time.DateTime
 import scala.util.{Failure, Success, Try}
 
 import com.syntaxjockey.smr._
+import com.syntaxjockey.smr.world.WorldState
 
 /**
  * 
