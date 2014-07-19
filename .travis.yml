@@ -1,7 +1,8 @@
 language: scala
 scala:
-  - "2.10.3"
+  - "2.10.4"
 jdk:
+  - openjdk7
   - oraclejdk7
 script:
   - sbt ++$TRAVIS_SCALA_VERSION "set logLevel in compile := Level.Warn" "compile" "test" "multi-jvm:test"
