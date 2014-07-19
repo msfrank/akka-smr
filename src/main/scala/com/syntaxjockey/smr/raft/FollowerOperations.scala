@@ -23,8 +23,8 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
   val minimumProcessors: Int
 
   // persistent server state
+  val logEntries: Log
   var currentTerm: Int
-  var logEntries: Vector[LogEntry]
   var votedFor: ActorRef
 
   // volatile server state
@@ -86,19 +86,19 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
           // an entry exists at prevLogIndex, but it conflicts with a new one (same index but different terms)
           if (prevEntry.term != appendEntries.prevLogTerm) {
             // delete the existing entry and all that follow it
-            log.debug("deleting log entries {}", logEntries.drop(appendEntries.prevLogIndex))
-            logEntries = logEntries.take(appendEntries.prevLogIndex)
+            val removed = logEntries.removeAfter(appendEntries.prevLogIndex)
+            log.debug("deleting log entries {}", removed)
             AppendEntriesRejected(currentTerm, LogPosition(appendEntries.prevLogIndex, appendEntries.prevLogTerm))
           } else {
             // if there are any entries after prevLogIndex, then drop them
             if (logEntries.length > appendEntries.prevLogIndex + 1) {
-              log.debug("deleting log entries {}", logEntries.drop(appendEntries.prevLogIndex + 1))
-              logEntries = logEntries.take(appendEntries.prevLogIndex + 1)
+              val removed = logEntries.removeAfter(appendEntries.prevLogIndex)
+              log.debug("deleting log entries {}", removed)
             }
             // if this is not a heartbeat, append the new entries
             if (appendEntries.entries.length > 0) {
               log.debug("appending log entries {}", appendEntries.entries)
-              logEntries = logEntries ++ appendEntries.entries
+              logEntries.append(appendEntries.entries)
               // immediately apply any configurations we find
               appendEntries.entries.foreach {
                 case LogEntry(command: ConfigurationCommand, _, _, _) =>

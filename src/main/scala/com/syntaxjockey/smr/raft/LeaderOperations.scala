@@ -25,8 +25,8 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
   val minimumProcessors: Int
 
   // persistent server state
+  val logEntries: Log
   var currentTerm: Int
-  var logEntries: Vector[LogEntry]
   var votedFor: ActorRef
 
   // volatile server state
@@ -96,7 +96,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
     // when a new command comes in, add a log entry for it then replicate entry to followers
     case Event(command: Command, Leader(followerStates, commitQueue)) =>
       val logEntry = LogEntry(command, sender(), logEntries.length, currentTerm)
-      logEntries = logEntries :+ logEntry
+      logEntries.append(logEntry)
       log.debug("appending log entry {}", logEntry)
       val updatedStates = followerStates.map {
         case (follower,state) if state.inFlight.isEmpty =>
@@ -299,7 +299,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
     if (logEntries.length > follower.nextIndex) {
       val numBehind = logEntries.length - follower.nextIndex
       val until = if (numBehind < maxEntriesBatch) follower.nextIndex + numBehind else follower.nextIndex + maxEntriesBatch
-      val entries = logEntries.slice(follower.nextIndex - 1, until + 1)
+      val entries = logEntries.slice(follower.nextIndex - 1, until + 1).toVector
       val prevEntry = entries.head
       val currEntries = entries.tail
       AppendEntriesRPC(currentTerm, prevEntry.index, prevEntry.term, currEntries, commitIndex)

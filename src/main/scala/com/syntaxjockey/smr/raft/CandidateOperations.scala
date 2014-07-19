@@ -23,8 +23,8 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
   val minimumProcessors: Int
 
   // persistent server state
+  val logEntries: Log
   var currentTerm: Int
-  var logEntries: Vector[LogEntry]
   var votedFor: ActorRef
 
   // volatile server state
@@ -135,7 +135,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
     case transition @ _ -> Candidate =>
       monitor ! ProcessorTransitionEvent(transition._1, transition._2)
       val nextTerm = currentTerm + 1
-      val lastEntry = if (logEntries.isEmpty) InitialEntry else logEntries.last
+      val lastEntry = logEntries.lastOption.getOrElse(InitialEntry)
       val vote = RequestVoteRPC(nextTerm, lastEntry.index, lastEntry.term)
       log.debug("we transition to candidate and cast vote {}", vote)
       // FIXME: do we ignore peers which are leaving?

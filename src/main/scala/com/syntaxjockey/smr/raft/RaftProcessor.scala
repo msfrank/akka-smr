@@ -15,10 +15,6 @@ import com.syntaxjockey.smr.world.WorldState
  */
 sealed trait RaftProcessorMessage
 
-/**
- * A single entry in the RAFT replication log.
- */
-case class LogEntry(command: Command, caller: ActorRef, index: Int, term: Int)
 
 case class LogPosition(index: Int, term: Int)
 
@@ -37,8 +33,8 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
   val ec = context.dispatcher
 
   // persistent server state
+  val logEntries: Log = new InMemoryLog(Vector(InitialEntry))
   var currentTerm: Int = 0
-  var logEntries: Vector[LogEntry] = Vector(InitialEntry)
   var votedFor: ActorRef = ActorRef.noSender
 
   // volatile server state
