@@ -13,18 +13,15 @@ import com.syntaxjockey.smr.namespace.NamespacePath
  * Proxy actor for coordinating RaftProcessors in a cluster.
  */
 class ReplicatedStateMachine(monitor: ActorRef,
-                             minimumProcessors: Int,
-                             processorRole: Option[String],
-                             electionTimeout: RandomBoundedDuration,
-                             idleTimeout: FiniteDuration,
-                             maxEntriesBatch: Int)
+                             settings: RaftProcessorSettings,
+                             processorRole: Option[String])
 extends Actor with ActorLogging {
   import ReplicatedStateMachine._
   import com.syntaxjockey.smr.raft.RaftProcessor.Leader
   import context.dispatcher
 
   // config
-  val localProcessor = context.actorOf(RaftProcessor.props(self, minimumProcessors, electionTimeout, idleTimeout, maxEntriesBatch))
+  val localProcessor = context.actorOf(RaftProcessor.props(self, settings))
 
   // state
   var clusterState: CurrentClusterState = CurrentClusterState(SortedSet.empty, Set.empty, Set.empty, None, Map.empty)
@@ -222,12 +219,9 @@ extends Actor with ActorLogging {
 
 object ReplicatedStateMachine {
   def props(monitor: ActorRef,
-            minimumProcessors: Int,
-            processorRole: Option[String],
-            electionTimeout: RandomBoundedDuration,
-            idleTimeout: FiniteDuration,
-            maxEntriesBatch: Int) = {
-    Props(classOf[ReplicatedStateMachine], monitor, minimumProcessors, processorRole, electionTimeout, idleTimeout, maxEntriesBatch)
+            settings: RaftProcessorSettings,
+            processorRole: Option[String]) = {
+    Props(classOf[ReplicatedStateMachine], monitor, settings, processorRole)
   }
 
   case object ReadCurrentClusterState

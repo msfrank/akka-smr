@@ -1,7 +1,10 @@
 package com.syntaxjockey.smr.raft
 
+import java.nio.file.{Paths, Path}
+
 import akka.actor._
 import akka.actor.OneForOneStrategy
+import akka.serialization.SerializationExtension
 import scala.concurrent.duration._
 import scala.util.{Try,Success}
 
@@ -11,29 +14,25 @@ import com.syntaxjockey.smr.namespace.NamespacePath
 import com.syntaxjockey.smr.world.WorldState
 
 /**
- * marker trait to identify raft processor messages
- */
-sealed trait RaftProcessorMessage
-
-
-case class LogPosition(index: Int, term: Int)
-
-/**
  * A single processor implementing the RAFT state machine replication protocol.
  */
-class RaftProcessor(val monitor: ActorRef,
-                    val minimumProcessors: Int,
-                    val electionTimeout: RandomBoundedDuration,
-                    val idleTimeout: FiniteDuration,
-                    val maxEntriesBatch: Int)
+class RaftProcessor(val monitor: ActorRef, settings: RaftProcessorSettings)
 extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperations with CandidateOperations with LeaderOperations with Stash {
   import RaftProcessor._
   import SupervisorStrategy.Stop
 
   val ec = context.dispatcher
 
+  // config
+  val minimumProcessors: Int = settings.minimumProcessors
+  val electionTimeout: RandomBoundedDuration = settings.electionTimeout
+  val idleTimeout: FiniteDuration = settings.idleTimeout
+  val maxEntriesBatch: Int = settings.maxEntriesBatch
+
   // persistent server state
-  val logEntries: Log = new InMemoryLog(Vector(InitialEntry))
+  val logEntries: Log = new PersistentLog(settings.logDirectory, SerializationExtension(context.system))
+  if (logEntries.isEmpty)
+    logEntries.append(InitialEntry)
   var currentTerm: Int = 0
   var votedFor: ActorRef = ActorRef.noSender
 
@@ -84,17 +83,25 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
   override val supervisorStrategy = OneForOneStrategy(maxNrOfRetries = 3, withinTimeRange = 1.minute) {
     case ex: Exception => Stop
   }
+
+  override def postStop(): Unit = {
+    logEntries.close()
+  }
 }
+
+/**
+ * marker trait to identify raft processor messages
+ */
+sealed trait RaftProcessorMessage
+
+/**
+ *
+ */
+case class LogPosition(index: Int, term: Int)
 
 object RaftProcessor {
 
-  def props(monitor: ActorRef,
-            minimumProcessors: Int,
-            electionTimeout: RandomBoundedDuration,
-            idleTimeout: FiniteDuration,
-            maxEntriesBatch: Int) = {
-    Props(classOf[RaftProcessor], monitor, minimumProcessors, electionTimeout, idleTimeout, maxEntriesBatch)
-  }
+  def props(monitor: ActorRef, settings: RaftProcessorSettings) = Props(classOf[RaftProcessor], monitor, settings)
 
   // helper classes
   case class FollowerState(follower: ActorRef, nextIndex: Int, matchIndex: Int, inFlight: Option[AppendEntriesRPC], nextHeartbeat: Option[Cancellable])

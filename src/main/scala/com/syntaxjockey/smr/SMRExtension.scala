@@ -1,10 +1,12 @@
 package com.syntaxjockey.smr
 
+import java.nio.file.Paths
+
 import akka.actor._
 import scala.concurrent.duration.FiniteDuration
 import java.util.concurrent.TimeUnit
 
-import com.syntaxjockey.smr.raft.RandomBoundedDuration
+import com.syntaxjockey.smr.raft.{RaftProcessorSettings, RandomBoundedDuration}
 
 trait SMREvent
 case object SMRClusterReadyEvent extends SMREvent
@@ -32,13 +34,16 @@ class SMRExtensionImpl(system: ActorSystem) extends Extension {
   val electionTimeoutVariance = config.getDuration("election-timeout-variance", TimeUnit.MILLISECONDS)
   val idleTimeout = config.getDuration("idle-timeout", TimeUnit.MILLISECONDS)
   val maxEntriesBatch = config.getInt("max-entries-batch")
+  val logDirectory = Paths.get(config.getString("log-directory"))
+  val logSnapshotModulo = config.getInt("log-snapshot-modulo")
   val eventStream = system.actorOf(Props(classOf[SMREventStream]))
   val rsm = {
     val lowerBound = FiniteDuration(electionTimeout, TimeUnit.MILLISECONDS)
     val upperBound = FiniteDuration(electionTimeout + electionTimeoutVariance, TimeUnit.MILLISECONDS)
     val _electionTimeout = RandomBoundedDuration(lowerBound, upperBound)
     val _idleTimeout = FiniteDuration(idleTimeout, TimeUnit.MILLISECONDS)
-    system.actorOf(ReplicatedStateMachine.props(eventStream, minimumNrProcessors, processorRole, _electionTimeout, _idleTimeout, maxEntriesBatch), smrName)
+    val settings = RaftProcessorSettings(minimumNrProcessors, _electionTimeout, _idleTimeout, maxEntriesBatch, logDirectory, logSnapshotModulo)
+    system.actorOf(ReplicatedStateMachine.props(eventStream, settings, processorRole), smrName)
   }
 }
 

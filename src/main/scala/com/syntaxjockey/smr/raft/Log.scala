@@ -23,6 +23,7 @@ trait Log {
   def append(entries: Iterable[LogEntry]): Unit
   def append(entry: LogEntry): Unit
   def removeAfter(index: Int): Iterable[LogEntry]
+  def close(): Unit
 }
 
 /**
@@ -45,10 +46,10 @@ class InMemoryLog(initial: Iterable[LogEntry]) extends Log {
 
   def append(entry: LogEntry): Unit = log = log :+ entry
   def append(entries: Iterable[LogEntry]): Unit = log = log ++ entries
-
   def removeAfter(index: Int): Iterable[LogEntry] = {
     val removed = log.drop(index)
     log = log.take(index)
     removed
   }
+  def close(): Unit = { }
 }
