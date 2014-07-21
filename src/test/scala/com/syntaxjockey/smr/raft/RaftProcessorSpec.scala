@@ -7,7 +7,7 @@ import java.util.UUID
 
 import org.scalatest.{WordSpecLike, BeforeAndAfterAll}
 import org.scalatest.matchers.MustMatchers
-import akka.actor.{ActorLogging, Actor, ActorSystem}
+import akka.actor.{ActorRef, ActorLogging, Actor, ActorSystem}
 import akka.testkit.{ImplicitSender, TestKit}
 import com.typesafe.config.ConfigFactory
 import scala.concurrent.duration._
@@ -78,13 +78,21 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
       val processor2 = system.actorOf(RaftProcessor.props(self, settings2))
       val processor3 = system.actorOf(RaftProcessor.props(self, settings3))
       processor1 ! Configuration(Set(processor2, processor3))
-      expectMsg(ProcessorTransitionEvent(Incubating, Follower))
       processor2 ! Configuration(Set(processor1, processor3))
-      expectMsg(ProcessorTransitionEvent(Incubating, Follower))
       processor3 ! Configuration(Set(processor1, processor2))
-      expectMsg(ProcessorTransitionEvent(Incubating, Follower))
-      expectMsg(ProcessorTransitionEvent(Follower, Candidate))  // processor1 becomes candidate after election timeout
-      expectMsg(ProcessorTransitionEvent(Candidate, Leader))    // processor1 becomes leader after receiving votes from processors 2 and 3
+      var events: Map[ActorRef, RaftProcessorEvent] = Map.empty
+      within(10.seconds) {
+        var msg = expectMsgClass(classOf[ProcessorTransitionEvent])
+        events = events.+(lastSender -> msg)
+        msg = expectMsgClass(classOf[ProcessorTransitionEvent])
+        events = events.+(lastSender -> msg)
+        msg = expectMsgClass(classOf[ProcessorTransitionEvent])
+        events = events.+(lastSender -> msg)
+      }
+      //expectMsg(ProcessorTransitionEvent(Incubating, Follower))
+      //expectMsg(ProcessorTransitionEvent(Follower, Candidate))  // processor1 becomes candidate after election timeout
+      //expectMsg(ProcessorTransitionEvent(Candidate, Leader))    // processor1 becomes leader after receiving votes from processors 2 and 3
+      println(events)
     }}}
 
 //    "replicate a command" in {

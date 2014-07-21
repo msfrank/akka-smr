@@ -121,7 +121,7 @@ extends Actor with ActorLogging {
     case LeaderElectionEvent(newLeader, term) =>
       // FIXME: this logic seems outdated, need to revisit
       leader = if (newLeader == localProcessor) Some(self) else Some(remoteProcessors(newLeader.path.address))
-      if (!buffered.isEmpty && inflight.isEmpty) {
+      if (buffered.nonEmpty && inflight.isEmpty) {
         val request = buffered.head
         leader.get ! request.command
         inflight = Some(request)

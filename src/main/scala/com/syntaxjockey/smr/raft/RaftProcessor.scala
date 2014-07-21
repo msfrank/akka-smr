@@ -43,6 +43,7 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
   var world: WorldState = WorldState.void
 
   startWith(Incubating, NoData)
+  log.debug("processor is incubating")
 
   /*
    * Incubating is a special state not described in the Raft paper.  the RaftProcessor
@@ -53,13 +54,14 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
   when(Incubating) {
 
     case Event(config: Configuration, NoData) =>
-      if (config.peers.size >= minimumProcessors) {
+      log.debug("using processor peers {}", config.peers.map(_.path).mkString(", "))
+      if (config.peers.size >= minimumProcessors - 1) {
         world = WorldState(world.version, world.namespaces, ConfigurationState(Vector(config)))
-        log.debug("starting processing with peers:\n{}", config.peers.map("  " + _).mkString("\n"))
         // redeliver any buffered messages
         unstashAll()
         // notify monitor that the cluster is ready
         monitor ! SMRClusterReadyEvent
+        log.debug("cluster is ready")
         goto(Follower) using Follower(None)
       } else stay()
 
@@ -74,6 +76,7 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
   onTransition {
     case _ -> Incubating =>
       monitor ! SMRClusterLostEvent
+      log.debug("cluster was lost")
   }
   
   // start the FSM
