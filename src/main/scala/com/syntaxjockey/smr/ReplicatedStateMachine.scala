@@ -3,6 +3,7 @@ package com.syntaxjockey.smr
 import akka.actor._
 import akka.cluster.Cluster
 import akka.cluster.ClusterEvent._
+import com.syntaxjockey.smr.raft.RaftProcessor.Incubating
 import scala.concurrent.duration._
 import scala.collection.SortedSet
 
@@ -117,6 +118,10 @@ extends Actor with ActorLogging {
     case ProcessorTransitionEvent(prevState, newState) =>
       if (prevState == Leader && newState != Leader)
       log.debug("processor transitions from {} to {}", prevState, newState)
+      if (prevState == Incubating && newState != Incubating)
+        monitor ! SMRClusterReadyEvent
+      if (prevState != Incubating && newState == Incubating)
+        monitor ! SMRClusterLostEvent
 
     case LeaderElectionEvent(newLeader, term) =>
       // FIXME: this logic seems outdated, need to revisit
@@ -129,10 +134,6 @@ extends Actor with ActorLogging {
       }
       log.debug("processor {} is now leader for term {}", newLeader.path, term)
 
-    case event: SMREvent =>
-      log.debug("received {}", event)
-      monitor ! event
-
     /*
      * Command protocol:
      *  1. Command is received by the RSM.  if a leader is currently defined, and there are no
@@ -141,7 +142,6 @@ extends Actor with ActorLogging {
      *  2. Once the command has been acknowledged by the processor, the processor will reply with
      *     CommandAccepted.
      */
-
     case watch @ Watch(command, observer) =>
       watches = watch.updateWatches(watches)
       self.tell(command, sender())

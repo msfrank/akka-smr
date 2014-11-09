@@ -1,5 +1,8 @@
 package com.syntaxjockey.smr
 
+import java.nio.file.Paths
+import java.util.UUID
+
 import akka.testkit.ImplicitSender
 import akka.cluster.Cluster
 import akka.cluster.ClusterEvent.{CurrentClusterState, MemberUp}
@@ -9,7 +12,7 @@ import org.joda.time.DateTime
 import scala.concurrent.duration._
 
 import com.syntaxjockey.smr.namespace._
-import com.syntaxjockey.smr.raft.RandomBoundedDuration
+import com.syntaxjockey.smr.raft.{RaftProcessorSettings, RandomBoundedDuration}
 
 class NamespaceSpecMultiJvmNode1 extends NamespaceSpec
 class NamespaceSpecMultiJvmNode2 extends NamespaceSpec
@@ -37,7 +40,9 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
       Cluster(system).join(node(node1).address)
       for (_ <- 0.until(roles.size)) { expectMsgClass(classOf[MemberUp]) }
       enterBarrier("startup")
-      rsm = system.actorOf(ReplicatedStateMachine.props(self, roles.size, None, electionTimeout, idleTimeout, maxEntriesBatch), "rsm")
+      val logDirectory = Paths.get("test-raft-log.%s".format(UUID.randomUUID()))
+      val settings = RaftProcessorSettings(roles.size, electionTimeout, idleTimeout, maxEntriesBatch, logDirectory, 0)
+      rsm = system.actorOf(ReplicatedStateMachine.props(self, settings, None), "rsm")
       within(30 seconds) { expectMsg(SMRClusterReadyEvent) }
       runOn(node1) {
         within(30 seconds) {

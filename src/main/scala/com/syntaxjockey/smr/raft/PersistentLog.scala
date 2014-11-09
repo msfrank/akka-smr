@@ -26,6 +26,10 @@ class PersistentLog(val logDirectory: Path, serialization: Serialization) extend
 
   private[this] val filesystem = FileSystems.getDefault
 
+  /* if log directory doesn't exist, then create it */
+  if (!Files.isDirectory(logDirectory))
+    Files.createDirectory(logDirectory)
+
   /* if snapshot exists, then apply it first */
   private[this] val snapshotPath = filesystem.getPath(logDirectory.toString, "snapshot")
   if (Files.exists(snapshotPath)) {

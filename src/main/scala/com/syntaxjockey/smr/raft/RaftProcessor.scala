@@ -59,9 +59,6 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
         world = WorldState(world.version, world.namespaces, ConfigurationState(Vector(config)))
         // redeliver any buffered messages
         unstashAll()
-        // notify monitor that the cluster is ready
-        monitor ! SMRClusterReadyEvent
-        log.debug("cluster is ready")
         goto(Follower) using Follower(None)
       } else stay()
 
@@ -75,8 +72,8 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
 
   onTransition {
     case _ -> Incubating =>
-      monitor ! SMRClusterLostEvent
-      log.debug("cluster was lost")
+      monitor ! ProcessorTransitionEvent(stateName, Incubating)
+      log.debug("we transition to incubating")
   }
   
   // start the FSM

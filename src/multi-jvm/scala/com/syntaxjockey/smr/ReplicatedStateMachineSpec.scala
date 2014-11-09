@@ -2,10 +2,13 @@ package com.syntaxjockey.smr
 
 import akka.remote.testkit.MultiNodeSpec
 import akka.testkit.ImplicitSender
-import scala.concurrent.duration._
 import akka.cluster.Cluster
 import akka.cluster.ClusterEvent.{CurrentClusterState, MemberUp}
-import com.syntaxjockey.smr.raft.RandomBoundedDuration
+import scala.concurrent.duration._
+import java.nio.file.Paths
+import java.util.UUID
+
+import com.syntaxjockey.smr.raft.{RaftProcessorSettings, RandomBoundedDuration}
 
 class ReplicatedStateMachineSpecMultiJvmNode1 extends ReplicatedStateMachineSpec
 class ReplicatedStateMachineSpecMultiJvmNode2 extends ReplicatedStateMachineSpec
@@ -30,7 +33,9 @@ class ReplicatedStateMachineSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) wi
       Cluster(system).join(node(node1).address)
       for (_ <- 0.until(roles.size)) { expectMsgClass(classOf[MemberUp]) }
       enterBarrier("startup")
-      system.actorOf(ReplicatedStateMachine.props(self, roles.size, None, electionTimeout, idleTimeout, maxEntriesBatch), "rsm")
+      val logDirectory = Paths.get("test-raft-log.%s".format(UUID.randomUUID()))
+      val settings = RaftProcessorSettings(roles.size, electionTimeout, idleTimeout, maxEntriesBatch, logDirectory, 0)
+      system.actorOf(ReplicatedStateMachine.props(self, settings, None), "rsm")
       within(30 seconds) { expectMsg(SMRClusterReadyEvent) }
       enterBarrier("finished")
     }
