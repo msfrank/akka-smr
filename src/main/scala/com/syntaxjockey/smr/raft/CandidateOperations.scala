@@ -1,6 +1,7 @@
 package com.syntaxjockey.smr.raft
 
 import akka.actor._
+import com.syntaxjockey.smr.log.{LogEntry, Log}
 import scala.concurrent.ExecutionContext
 
 import com.syntaxjockey.smr.raft.RaftProcessor._

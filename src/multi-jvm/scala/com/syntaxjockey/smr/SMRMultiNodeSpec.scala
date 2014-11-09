@@ -28,7 +28,7 @@ abstract class SMRMultiNodeSpec(config: MultiNodeConfig) extends MultiNodeSpec(c
   ple.start()
 
   private val fileAppender = new FileAppender[ILoggingEvent]()
-  fileAppender.setFile("test_%s.log".format(getClass.getSimpleName))
+  fileAppender.setFile("target/test_%s.log".format(getClass.getSimpleName))
   fileAppender.setEncoder(ple)
   fileAppender.setContext(lc)
   fileAppender.start()

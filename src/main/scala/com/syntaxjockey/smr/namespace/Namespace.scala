@@ -4,7 +4,6 @@ import akka.util.ByteString
 import org.joda.time.DateTime
 import scala.util.{Failure, Success, Try}
 
-
 /**
  * 
  */

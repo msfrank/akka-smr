@@ -23,7 +23,7 @@ class TransactionSpec extends WordSpec with MustMatchers {
       transaction.apply(WorldState.void) match {
         case Failure(ex) =>
           fail("transaction failed", ex)
-        case Success(WorldStateResult(world, result: TransactionResult, notifications)) =>
+        case Success(Response(world, result: TransactionResult, notifications)) =>
           result.results.length must be(3)
           world.namespaces.contains("foo") must be(true)
           val node = world.namespaces("foo").get("/n1")

@@ -9,9 +9,9 @@ import com.syntaxjockey.smr.world.WorldState
  *
  */
 case class ConfigurationCommand(config: Configuration) extends Command {
-  def apply(world: WorldState): Try[WorldStateResult] = {
+  def apply(world: WorldState): Try[Response] = {
     val transformed = WorldState(world.version, world.namespaces, ConfigurationState(world.config.states.tail))
-    Success(WorldStateResult(transformed, ConfigurationResult))
+    Success(Response(transformed, ConfigurationResult))
   }
 }
 

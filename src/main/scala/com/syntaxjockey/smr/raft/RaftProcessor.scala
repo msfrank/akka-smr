@@ -5,6 +5,7 @@ import java.nio.file.{Paths, Path}
 import akka.actor._
 import akka.actor.OneForOneStrategy
 import akka.serialization.SerializationExtension
+import com.syntaxjockey.smr.log.{PersistentLog, LogEntry, Log}
 import scala.concurrent.duration._
 import scala.util.{Try,Success}
 
@@ -107,7 +108,7 @@ object RaftProcessor {
   case class FollowerState(follower: ActorRef, nextIndex: Int, matchIndex: Int, inFlight: Option[AppendEntriesRPC], nextHeartbeat: Option[Cancellable])
 
   case object NullCommand extends Command {
-    def apply(world: WorldState): Try[WorldStateResult] = Success(WorldStateResult(world, new Result {}, Map.empty))
+    def apply(world: WorldState): Try[Response] = Success(Response(world, new Result {}, Map.empty))
   }
 
   val InitialEntry = LogEntry(NullCommand, ActorRef.noSender, 0, 0)

@@ -11,12 +11,12 @@ import com.syntaxjockey.smr.world.WorldState
  * a MutationCommand, so it's not possible (nor does it make sense) to nest transactions.
  */
 case class TransactionCommand(commands: Vector[MutationCommand]) extends Command {
-  def apply(world: WorldState): Try[WorldStateResult] = if (!commands.isEmpty) {
+  def apply(world: WorldState): Try[Response] = if (!commands.isEmpty) {
     var _world: WorldState = world
     var notifications: Map[NamespacePath,Notification] = Map.empty
     val results = commands.map { command =>
       command.apply(_world) match {
-        case Success(WorldStateResult(transformed, result: MutationResult, _notifications)) =>
+        case Success(Response(transformed, result: MutationResult, _notifications)) =>
           _world = transformed
           result.notifyPath().foreach {
             // if there is no notification pending for this nspath, then add it
@@ -25,14 +25,14 @@ case class TransactionCommand(commands: Vector[MutationCommand]) extends Command
             case _ => // otherwise do nothing, the client can't catch it anyways
           }
           result
-        case Success(WorldStateResult(transformed, result, _)) =>
+        case Success(Response(transformed, result, _)) =>
           _world = transformed
           result
-        case f: Failure[WorldStateResult] =>
+        case f: Failure[Response] =>
           return f  // short-circuit failure path
       }
     }
-    Success(WorldStateResult(_world, TransactionResult(results, this), notifications))
+    Success(Response(_world, TransactionResult(results, this), notifications))
   } else Failure(new IllegalArgumentException("Can't execute empty transaction"))
 }
 

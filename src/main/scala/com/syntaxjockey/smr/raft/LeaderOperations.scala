@@ -1,6 +1,7 @@
 package com.syntaxjockey.smr.raft
 
 import akka.actor.{ActorRef, LoggingFSM, Actor}
+import com.syntaxjockey.smr.log.{LogEntry, Log}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.ExecutionContext
 import scala.util.{Success,Failure}
@@ -176,7 +177,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
       // mark the log entry as applied and pass the command result to the caller
       lastApplied = logEntry.index
       logEntry.command.apply(world) match {
-        case Success(WorldStateResult(updated, result, notifications)) =>
+        case Success(Response(updated, result, notifications)) =>
           world = updated
           log.debug("EXEC {} returns {}", logEntry.command, result)
           // signal any outstanding watches

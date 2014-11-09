@@ -14,14 +14,14 @@ sealed trait NodeCommand extends Command
 
 
 case class NodeExists(namespace: String, path: Path) extends NodeCommand with WatchableCommand {
-  def apply(world: WorldState): Try[WorldStateResult] = {
+  def apply(world: WorldState): Try[Response] = {
     world.namespaces.get(namespace) match {
       case Some(ns) =>
         ns.find(path) match {
           case Some(node) =>
-            Success(WorldStateResult(world, ExistsResult(Some(node.stat), this)))
+            Success(Response(world, ExistsResult(Some(node.stat), this)))
           case None =>
-            Success(WorldStateResult(world, ExistsResult(None, this)))
+            Success(Response(world, ExistsResult(None, this)))
         }
       case None =>
         Failure(new NamespaceAbsent(namespace))
@@ -31,12 +31,12 @@ case class NodeExists(namespace: String, path: Path) extends NodeCommand with Wa
 }
 
 case class GetNodeChildren(namespace: String, path: Path) extends NodeCommand with WatchableCommand {
-  def apply(world: WorldState): Try[WorldStateResult] = {
+  def apply(world: WorldState): Try[Response] = {
     world.namespaces.get(namespace) match {
       case Some(ns) =>
         ns.find(path) match {
           case Some(node) =>
-            Success(WorldStateResult(world, GetNodeChildrenResult(node.stat, node.children.keys.map(path :+ _), this)))
+            Success(Response(world, GetNodeChildrenResult(node.stat, node.children.keys.map(path :+ _), this)))
           case None =>
             Failure(new InvalidPathException("path %s doesn't exist".format(path)))
         }
@@ -48,12 +48,12 @@ case class GetNodeChildren(namespace: String, path: Path) extends NodeCommand wi
 }
 
 case class GetNodeData(namespace: String, path: Path) extends NodeCommand with WatchableCommand {
-  def apply(world: WorldState): Try[WorldStateResult] = {
+  def apply(world: WorldState): Try[Response] = {
     world.namespaces.get(namespace) match {
       case Some(ns) =>
         ns.find(path) match {
           case Some(node) =>
-            Success(WorldStateResult(world, GetNodeDataResult(node.stat, node.data, this)))
+            Success(Response(world, GetNodeDataResult(node.stat, node.data, this)))
           case None =>
             Failure(new InvalidPathException("path %s doesn't exist".format(path)))
         }
@@ -65,14 +65,14 @@ case class GetNodeData(namespace: String, path: Path) extends NodeCommand with W
 }
 
 case class CreateNode(namespace: String, path: Path, data: ByteString, ctime: DateTime, isSequential: Boolean = false) extends NodeCommand with MutationCommand {
-  def transform(world: WorldState): Try[WorldStateResult] = {
+  def transform(world: WorldState): Try[Response] = {
     world.namespaces.get(namespace) match {
       case Some(ns) =>
         val cversion = world.version + 1
         ns.create(path, data, cversion, ctime, isSequential) match {
           case Success(updated) =>
             val transformed = WorldState(cversion, world.namespaces + (namespace -> updated), world.config)
-            Success(WorldStateResult(transformed, CreateNodeResult(path, this)))
+            Success(Response(transformed, CreateNodeResult(path, this)))
           case Failure(ex) =>
             Failure(ex)
         }
@@ -83,14 +83,14 @@ case class CreateNode(namespace: String, path: Path, data: ByteString, ctime: Da
 }
 
 case class SetNodeData(namespace: String, path: Path, data: ByteString, version: Option[Long], mtime: DateTime) extends NodeCommand with MutationCommand {
-  def transform(world: WorldState): Try[WorldStateResult] = {
+  def transform(world: WorldState): Try[Response] = {
     world.namespaces.get(namespace) match {
       case Some(ns) =>
         val mversion = world.version + 1
         ns.update(path, data, version, mversion, mtime) match {
           case Success(updated) =>
             val transformed = WorldState(mversion, world.namespaces + (namespace -> updated), world.config)
-            Success(WorldStateResult(transformed, SetNodeDataResult(ns.get(path).stat, this)))
+            Success(Response(transformed, SetNodeDataResult(ns.get(path).stat, this)))
           case Failure(ex) =>
             Failure(ex)
         }
@@ -101,14 +101,14 @@ case class SetNodeData(namespace: String, path: Path, data: ByteString, version:
 }
 
 case class DeleteNode(namespace: String, path: Path, version: Option[Long], mtime: DateTime) extends NodeCommand with MutationCommand {
-  def transform(world: WorldState): Try[WorldStateResult] = {
+  def transform(world: WorldState): Try[Response] = {
     world.namespaces.get(namespace) match {
       case Some(ns) =>
         val mversion = world.version + 1
         ns.delete(path, version, mversion, mtime) match {
           case Success(updated) =>
             val transformed = WorldState(mversion, world.namespaces + (namespace -> updated), world.config)
-            Success(WorldStateResult(transformed, DeleteNodeResult(path, this)))
+            Success(Response(transformed, DeleteNodeResult(path, this)))
           case Failure(ex) =>
             Failure(ex)
         }

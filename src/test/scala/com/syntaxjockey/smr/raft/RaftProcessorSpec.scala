@@ -13,7 +13,7 @@ import com.typesafe.config.ConfigFactory
 import scala.concurrent.duration._
 import scala.util.Success
 
-import com.syntaxjockey.smr.{PongResult, PingCommand, Configuration, WorldStateResult}
+import com.syntaxjockey.smr.{PongResult, PingCommand, Configuration, Response}
 import com.syntaxjockey.smr.world.WorldState
 
 class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpecLike with MustMatchers with BeforeAndAfterAll {
@@ -137,6 +137,6 @@ class TestExecutor extends Actor with ActorLogging {
 
 object TestExecutor {
   import com.syntaxjockey.smr.{Command,Result}
-  case class TestCommand(lsn: Int) extends Command { def apply(world: WorldState) = Success(WorldStateResult(world, TestResult(lsn))) }
+  case class TestCommand(lsn: Int) extends Command { def apply(world: WorldState) = Success(Response(world, TestResult(lsn))) }
   case class TestResult(lsn: Int) extends Result
 }

@@ -45,13 +45,13 @@ trait MutationCommand extends Command {
   /**
    * Mutate the specified world state, and return the result.
    */
-  def transform(world: WorldState): Try[WorldStateResult]
+  def transform(world: WorldState): Try[Response]
 
   /**
    * if the specified result is a MutationResult, then update the notification map
    */
-  def apply(world: WorldState): Try[WorldStateResult] = transform(world) match {
-    case Success(WorldStateResult(transformed, result: MutationResult, _notifications)) =>
+  def apply(world: WorldState): Try[Response] = transform(world) match {
+    case Success(Response(transformed, result: MutationResult, _notifications)) =>
       var notifications = _notifications
       result.notifyPath().foreach {
         // if there is no notification pending for this nspath, then add it
@@ -59,7 +59,7 @@ trait MutationCommand extends Command {
           notifications = notifications + (mutation.nspath -> mutation)
         case _ => // otherwise do nothing, the client can't catch it anyways
       }
-      Success(WorldStateResult(transformed, result, notifications))
+      Success(Response(transformed, result, notifications))
     case result => result
   }
 }

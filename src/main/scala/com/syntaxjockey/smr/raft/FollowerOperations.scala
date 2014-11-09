@@ -1,6 +1,7 @@
 package com.syntaxjockey.smr.raft
 
 import akka.actor._
+import com.syntaxjockey.smr.log.{LogEntry, Log}
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 
@@ -116,7 +117,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
                 // special case: command is a ConfigurationCommand
                 case (acc, LogEntry(command: ConfigurationCommand, _, _, _)) =>
                   command.apply(acc) match {
-                  case Success(WorldStateResult(updated, _, _)) =>
+                  case Success(Response(updated, _, _)) =>
                       if (command.config.peers.contains(self))
                         monitor ! SMRClusterChangedEvent
                       log.debug("merged configuration =>\n{}",
@@ -127,7 +128,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
                   }
                 case (acc, logEntry: LogEntry) =>
                   logEntry.command.apply(acc) match {
-                    case Success(WorldStateResult(updated, _, _)) => updated
+                    case Success(Response(updated, _, _)) => updated
                     case Failure(ex) => acc
                   }
               }

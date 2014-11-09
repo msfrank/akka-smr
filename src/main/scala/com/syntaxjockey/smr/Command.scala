@@ -13,7 +13,7 @@ trait Command {
    * Apply the command to the world state, returning a new world state if
    * successful, otherwise an Exception.
    */
-  def apply(world: WorldState): Try[WorldStateResult]
+  def apply(world: WorldState): Try[Response]
 }
 
 /**
@@ -30,7 +30,7 @@ class CommandFailed(cause: Throwable, val command: Command) extends Exception("C
  * Wraps the result of a command along with the transformed world state and
  * any notification side-effects.
  */
-case class WorldStateResult(world: WorldState, result: Result, notifications: Map[NamespacePath,Notification] = Map.empty)
+case class Response(world: WorldState, result: Result, notifications: Map[NamespacePath,Notification] = Map.empty)
 
 /**
  * Ping command, simply returns PongResult.  This is useful for testing that
@@ -38,7 +38,7 @@ case class WorldStateResult(world: WorldState, result: Result, notifications: Ma
  * optional, but if specified is returned in the PongResult.
  */
 case class PingCommand(correlationId: Option[Any] = None) extends Command {
-  def apply(world: WorldState): Try[WorldStateResult] = Success(WorldStateResult(world, PongResult(correlationId)))
+  def apply(world: WorldState): Try[Response] = Success(Response(world, PongResult(correlationId)))
 }
 
 /**

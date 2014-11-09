@@ -1,6 +1,6 @@
-package com.syntaxjockey.smr.raft
+package com.syntaxjockey.smr.log
 
-import java.io.{EOFException, ObjectOutputStream, ObjectInputStream}
+import java.io.{EOFException, ObjectInputStream, ObjectOutputStream}
 import java.nio.channels.Channels
 import java.nio.file._
 import java.util.zip.CRC32
@@ -8,7 +8,7 @@ import java.util.zip.CRC32
 import akka.serialization.Serialization
 import org.slf4j.LoggerFactory
 
-import scala.util.{Success, Failure}
+import scala.util.{Failure, Success}
 
 /**
  * An implementation of the replication log which persists to local storage.
@@ -66,8 +66,8 @@ class PersistentLog(val logDirectory: Path, serialization: Serialization) extend
   private[this] val segmentPaths = {
     val directoryStream: DirectoryStream[Path] = Files.newDirectoryStream(logDirectory, "segment.*")
     var segments = Vector.empty[Path]
-    import scala.language.implicitConversions
     import scala.collection.JavaConversions._
+    import scala.language.implicitConversions
     for (dir <- directoryStream.iterator())
       segments = segments :+ dir
     segments.sorted
