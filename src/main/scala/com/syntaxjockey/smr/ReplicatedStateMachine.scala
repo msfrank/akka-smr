@@ -5,7 +5,7 @@ import akka.cluster.Cluster
 import akka.cluster.ClusterEvent._
 import com.syntaxjockey.smr.command.Command
 import com.syntaxjockey.smr.raft.RaftProcessor.Incubating
-import com.syntaxjockey.smr.world.{Configuration, NamespacePath}
+import com.syntaxjockey.smr.world.{Configuration, Path}
 import scala.concurrent.duration._
 import scala.collection.SortedSet
 
@@ -32,7 +32,7 @@ extends Actor with ActorLogging {
   var inflight: Option[Request] = None
   var buffered: Vector[Request] = Vector.empty
   var accepted: Vector[Request] = Vector.empty
-  var watches: Map[NamespacePath,Set[ActorRef]] = Map.empty
+  var watches: Map[Path,Set[ActorRef]] = Map.empty
 
   // subscribe to cluster membership events
   Cluster(context.system).subscribe(self, InitialStateAsEvents, classOf[MemberEvent])
@@ -203,10 +203,10 @@ extends Actor with ActorLogging {
 
     case NotificationMap(notifications) =>
       notifications.values.foreach { notification =>
-        watches = watches.get(notification.nspath) match {
+        watches = watches.get(notification.path) match {
           case Some(observers) =>
             observers.foreach(_ ! notification)
-            watches - notification.nspath
+            watches - notification.path
           case None => watches
         }
       }

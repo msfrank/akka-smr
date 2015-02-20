@@ -1,12 +1,9 @@
 package com.syntaxjockey.smr.raft
 
-import java.nio.file.{Paths, Path}
-
 import akka.actor._
 import akka.actor.OneForOneStrategy
-import akka.serialization.SerializationExtension
 import com.syntaxjockey.smr.command.{Response, Result, Command}
-import com.syntaxjockey.smr.log.{EphemeralLog, PersistentLog, LogEntry, Log}
+import com.syntaxjockey.smr.log.{EphemeralLog, LogEntry, Log}
 import scala.concurrent.duration._
 import scala.util.{Try,Success}
 
@@ -167,4 +164,4 @@ case class CommandApplied(logEntry: LogEntry) extends RaftProcessorEvent
 case class ProcessorTransitionEvent(prevState: ProcessorState, newState: ProcessorState) extends RaftProcessorEvent
 case class LeaderElectionEvent(leader: ActorRef, term: Int) extends RaftProcessorEvent
 
-case class NotificationMap(notifications: Map[NamespacePath,Notification])
+case class NotificationMap(notifications: Map[Path,Notification])

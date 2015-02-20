@@ -13,7 +13,7 @@ trait WatchableCommand extends Command {
   /**
    * Returns the absolute path to the node which may be watched.
    */
-  def watchPath(): NamespacePath
+  def watchPath(): Path
 }
 
 /**
@@ -24,7 +24,7 @@ case class Watch(command: WatchableCommand, observer: ActorRef) {
    * Returns a copy of the watches Map with a watch added for the namespace path
    * returned from command.watchPath().
    */
-  def updateWatches(watches: Map[NamespacePath,Set[ActorRef]]): Map[NamespacePath,Set[ActorRef]] = {
+  def updateWatches(watches: Map[Path,Set[ActorRef]]): Map[Path,Set[ActorRef]] = {
     val nspath = command.watchPath()
     watches + (nspath -> (watches.getOrElse(nspath, Set.empty) + observer))
   }
@@ -55,8 +55,8 @@ trait MutationCommand extends Command {
       var notifications = _notifications
       result.notifyPath().foreach {
         // if there is no notification pending for this nspath, then add it
-        case mutation if !notifications.contains(mutation.nspath) =>
-          notifications = notifications + (mutation.nspath -> mutation)
+        case mutation if !notifications.contains(mutation.path) =>
+          notifications = notifications + (mutation.path -> mutation)
         case _ => // otherwise do nothing, the client can't catch it anyways
       }
       Success(Response(transformed, result, notifications))
@@ -75,9 +75,9 @@ trait MutationResult {
 }
 
 /**
- * Contains the notification type for a namespace path.
+ * Contains the notification type for a path.
  */
-case class Notification(nspath: NamespacePath, event: Notification.NotificationEvent)
+case class Notification(path: Path, event: Notification.NotificationEvent)
 
 object Notification {
   sealed trait NotificationEvent

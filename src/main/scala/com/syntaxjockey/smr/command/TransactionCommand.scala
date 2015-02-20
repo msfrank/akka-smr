@@ -14,15 +14,15 @@ import com.syntaxjockey.smr.world._
 case class TransactionCommand(commands: Vector[MutationCommand]) extends Command {
   def apply(world: World): Try[Response] = if (commands.nonEmpty) {
     var _world: World = world
-    var notifications: Map[NamespacePath,Notification] = Map.empty
+    var notifications: Map[Path,Notification] = Map.empty
     val results = commands.map { command =>
       command.apply(_world) match {
         case Success(Response(transformed, result: MutationResult, _notifications)) =>
           _world = transformed
           result.notifyPath().foreach {
             // if there is no notification pending for this nspath, then add it
-            case mutation if !notifications.contains(mutation.nspath) =>
-              notifications = notifications + (mutation.nspath -> mutation)
+            case mutation if !notifications.contains(mutation.path) =>
+              notifications = notifications + (mutation.path -> mutation)
             case _ => // otherwise do nothing, the client can't catch it anyways
           }
           result

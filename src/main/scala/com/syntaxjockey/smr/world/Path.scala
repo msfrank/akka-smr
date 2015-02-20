@@ -1,11 +1,12 @@
 package com.syntaxjockey.smr.world
 
-import java.net.URI
+import scala.collection.IndexedSeqLike
 
 import com.syntaxjockey.smr.command.InvalidPathException
 
-import scala.collection.IndexedSeqLike
-
+/**
+ *
+ */
 final class Path private (val segments: Array[String], val length: Int) extends IndexedSeq[String] with IndexedSeqLike[String,Path] with Serializable {
   import scala.collection.mutable
 
@@ -67,12 +68,9 @@ object Path {
   val root: Path = new Path(new Array(0), 0)
 }
 
-case class NamespacePath(namespace: String, path: Path)
-
 object PathConversions {
   import scala.language.implicitConversions
   implicit def string2Path(string: String): Path = Path(string)
   implicit def seq2Path(seq: Seq[String]): Path = Path(seq)
-  implicit def uri2NamespacePath(uri: URI): NamespacePath = NamespacePath(uri.getHost, Path(uri.getPath))
 }
 

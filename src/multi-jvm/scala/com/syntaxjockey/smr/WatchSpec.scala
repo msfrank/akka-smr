@@ -8,12 +8,12 @@ import akka.cluster.Cluster
 import akka.cluster.ClusterEvent.{CurrentClusterState, MemberUp}
 import akka.actor.ActorRef
 import akka.util.ByteString
-import com.syntaxjockey.smr.world.{PathConversions, NamespacePath}
 import org.joda.time.DateTime
 import scala.concurrent.duration._
 
 import com.syntaxjockey.smr.command._
 import com.syntaxjockey.smr.raft.{RaftProcessorSettings, RandomBoundedDuration}
+import com.syntaxjockey.smr.world.{PathConversions, Path}
 
 class WatchSpecMultiJvmNode1 extends WatchSpec
 class WatchSpecMultiJvmNode2 extends WatchSpec
@@ -56,8 +56,8 @@ class WatchSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender
           expectMsgClass(classOf[GetNodeDataResult])
           rsm ! SetNodeData("foo", "/node1", ByteString("node data changed"), None, DateTime.now())
           val notification = expectMsgClass(classOf[Notification])
-          val expectedPath =  NamespacePath("foo", "/node1")
-          notification.nspath shouldEqual expectedPath
+          val expectedPath =  Path("/node1")
+          notification.path shouldEqual expectedPath
           notification.event should be(Notification.NodeDataChangedEvent)
           expectMsgClass(classOf[SetNodeDataResult])
         }
@@ -75,8 +75,8 @@ class WatchSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender
           expectMsgClass(classOf[GetNodeDataResult])
           enterBarrier("set-watch")
           val notification = expectMsgClass(classOf[Notification])
-          val expectedPath =  NamespacePath("foo", "/node2")
-          notification.nspath shouldEqual expectedPath
+          val expectedPath = Path("/node2")
+          notification.path shouldEqual expectedPath
           notification.event should be(Notification.NodeDataChangedEvent)
         }
       }

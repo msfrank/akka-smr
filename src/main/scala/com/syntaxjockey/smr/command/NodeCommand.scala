@@ -23,7 +23,7 @@ case class NodeExists(namespace: String, path: Path) extends NodeCommand with Wa
         Failure(ex)
     }
   }
-  def watchPath() = NamespacePath(namespace, path)
+  def watchPath() = path
 }
 
 case class GetNodeChildren(namespace: String, path: Path) extends NodeCommand with WatchableCommand {
@@ -32,14 +32,14 @@ case class GetNodeChildren(namespace: String, path: Path) extends NodeCommand wi
       Response(world, GetNodeChildrenResult(node.stat, node.children.map(path :+ _), this))
     }
   }
-  def watchPath() = NamespacePath(namespace, path)
+  def watchPath() = path
 }
 
 case class GetNodeData(namespace: String, path: Path) extends NodeCommand with WatchableCommand {
   def apply(world: World): Try[Response] = {
     world.getNode(path) map { node => Response(world, GetNodeDataResult(node.stat, node.data, this)) }
   }
-  def watchPath() = NamespacePath(namespace, path)
+  def watchPath() = path
 }
 
 case class CreateNode(namespace: String, path: Path, data: ByteString, ctime: DateTime, isSequential: Boolean = false) extends NodeCommand with MutationCommand {
@@ -76,18 +76,18 @@ case class GetNodeDataResult(stat: Stat, data: ByteString, op: GetNodeData) exte
 
 case class CreateNodeResult(path: Path, op: CreateNode) extends NodeResult with MutationResult {
   def notifyPath() = Vector(
-    Notification(NamespacePath(op.namespace, op.path.init), Notification.NodeChildrenChangedEvent),
-    Notification(NamespacePath(op.namespace, op.path), Notification.NodeCreatedEvent)
+    Notification(op.path.init, Notification.NodeChildrenChangedEvent),
+    Notification(op.path, Notification.NodeCreatedEvent)
   )
 }
 
 case class SetNodeDataResult(stat: Stat, op: SetNodeData) extends NodeResult with MutationResult {
-  def notifyPath() = Vector(Notification(NamespacePath(op.namespace, op.path), Notification.NodeDataChangedEvent))
+  def notifyPath() = Vector(Notification(op.path, Notification.NodeDataChangedEvent))
 }
 
 case class DeleteNodeResult(path: Path, op: DeleteNode) extends NodeResult with MutationResult {
   def notifyPath() = Vector(
-    Notification(NamespacePath(op.namespace, op.path.init), Notification.NodeChildrenChangedEvent),
-    Notification(NamespacePath(op.namespace, op.path), Notification.NodeDeletedEvent)
+    Notification(op.path.init, Notification.NodeChildrenChangedEvent),
+    Notification(op.path, Notification.NodeDeletedEvent)
   )
 }
