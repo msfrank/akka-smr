@@ -8,8 +8,9 @@ object AkkaSmrBuild extends Build {
   val projectVersion = "0.0.1"
   val akkaVersion = "2.3.9"
   val scalatestVersion = "2.2.4"
-  val scalaLangVersion = "2.11.5"
+  val logbackVersion = "1.0.13"
 
+  val scalaLangVersion = "2.11.5"
   val commonScalacOptions = Seq("-feature", "-deprecation")
   val commonJavacOptions = Seq("-source", "1.7")
 
@@ -35,7 +36,7 @@ object AkkaSmrBuild extends Build {
         "org.scalatest" %% "scalatest" % scalatestVersion % "test",
         "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
         "com.typesafe.akka" %% "akka-multi-node-testkit" % akkaVersion % "test",
-        "ch.qos.logback" % "logback-classic" % "1.0.13" % "test"
+        "ch.qos.logback" % "logback-classic" % logbackVersion % "test"
       ),
 
       // make sure that MultiJvm test are compiled by the default test compilation
@@ -57,5 +58,6 @@ object AkkaSmrBuild extends Build {
               testResults.events ++ multiJvmResults.events,
               testResults.summaries ++ multiJvmResults.summaries)
         }
-    )
+
+    ).configs(MultiJvm)
 }
