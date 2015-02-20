@@ -48,6 +48,8 @@ object SMRExtensionMultiNodeConfig extends MultiNodeConfig {
       |    election-timeout-variance = 500 milliseconds
       |    idle-timeout = 1 second
       |    max-entries-batch = 10
+      |    log-directory = logs/
+      |    log-snapshot-modulo = 16
       |  }
       |}
     """.stripMargin).withFallback(ConfigFactory.load("multi-jvm.conf")))
