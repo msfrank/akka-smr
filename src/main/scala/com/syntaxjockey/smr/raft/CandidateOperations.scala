@@ -1,12 +1,12 @@
 package com.syntaxjockey.smr.raft
 
 import akka.actor._
-import com.syntaxjockey.smr.log.{LogEntry, Log}
 import scala.concurrent.ExecutionContext
 
 import com.syntaxjockey.smr.raft.RaftProcessor._
-import com.syntaxjockey.smr.{Configuration, Command}
-import com.syntaxjockey.smr.world.WorldState
+import com.syntaxjockey.smr.world.{Configuration, World}
+import com.syntaxjockey.smr.command.Command
+import com.syntaxjockey.smr.log.{LogEntry, Log}
 
 /*
  * "[Candidate state] is used to elect a new leader ... If a candidate wins the
@@ -32,7 +32,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
   var commitIndex: Int
   var lastApplied: Int
 
-  var world: WorldState
+  var world: World
 
   when(Candidate) {
 
@@ -78,7 +78,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       val votesReceived = if (voteGranted && candidateTerm == currentTerm) currentTally + sender else currentTally
       // if we have received a majority of votes, then become leader
       if (receivedMajority(votesReceived)) {
-        val peers = world.config.states.flatMap(_.peers).toSet - self
+        val peers = world.processors - self
         val lastEntry = logEntries.lastOption.getOrElse(InitialEntry)
         val followerStates = peers.map { follower =>
           follower -> FollowerState(follower, lastEntry.index + 1, 0, None, None)
@@ -125,7 +125,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
    * false.
    */
   def receivedMajority(tally: Set[ActorRef]): Boolean = {
-    world.config.states.foreach {
+    world.configurations.foreach {
       case Configuration(peers) if tally.size <= peers.size / 2 => return false
       case _ => // do nothing
     }
@@ -140,7 +140,7 @@ trait CandidateOperations extends Actor with LoggingFSM[ProcessorState,Processor
       val vote = RequestVoteRPC(nextTerm, lastEntry.index, lastEntry.term)
       log.debug("we transition to candidate and cast vote {}", vote)
       // FIXME: do we ignore peers which are leaving?
-      val peers = world.config.states.flatMap(_.peers).toSet - self
+      val peers = world.processors - self
       peers.foreach(_ ! vote)
       currentTerm = nextTerm
       votedFor = self

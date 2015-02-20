@@ -8,10 +8,11 @@ import akka.cluster.Cluster
 import akka.cluster.ClusterEvent.{CurrentClusterState, MemberUp}
 import akka.actor.ActorRef
 import akka.util.ByteString
+import com.syntaxjockey.smr.world.{PathConversions, NamespacePath}
 import org.joda.time.DateTime
 import scala.concurrent.duration._
 
-import com.syntaxjockey.smr.namespace._
+import com.syntaxjockey.smr.command._
 import com.syntaxjockey.smr.raft.{RaftProcessorSettings, RandomBoundedDuration}
 
 class WatchSpecMultiJvmNode1 extends WatchSpec
@@ -40,14 +41,15 @@ class WatchSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender
       Cluster(system).join(node(node1).address)
       for (_ <- 0.until(roles.size)) { expectMsgClass(classOf[MemberUp]) }
       enterBarrier("joined-cluster")
-      val logDirectory = Paths.get("test-raft-log.%s".format(UUID.randomUUID()))
+      val uuid = UUID.randomUUID()
+      val logDirectory = Paths.get("test-raft-log.%s".format(uuid))
       val settings = RaftProcessorSettings(roles.size, electionTimeout, idleTimeout, maxEntriesBatch, logDirectory, 0)
       rsm = system.actorOf(ReplicatedStateMachine.props(self, settings, None), "rsm")
       within(30 seconds) { expectMsg(SMRClusterReadyEvent) }
       runOn(node1) {
         within(30 seconds) {
-          rsm ! CreateNamespace("foo")
-          expectMsgClass(classOf[CreateNamespaceResult])
+          rsm ! PingCommand(Some(uuid))
+          expectMsgClass(classOf[PongResult]) must be(Some(uuid))
           rsm ! CreateNode("foo", "/node1", ByteString("hello, world"), DateTime.now())
           expectMsgClass(classOf[CreateNodeResult])
           rsm ! Watch(GetNodeData("foo", "/node1"), self)

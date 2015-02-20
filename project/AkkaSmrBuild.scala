@@ -6,7 +6,8 @@ import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 object AkkaSmrBuild extends Build {
 
   val projectVersion = "0.0.1"
-  val akkaVersion = "2.3.4"
+  val akkaVersion = "2.3.9"
+  val scalatestVersion = "2.2.4"
 
   lazy val akkaSmrBuild = Project(
     id = "akka-smr",
@@ -15,7 +16,7 @@ object AkkaSmrBuild extends Build {
       exportJars := true,
       name := "akka-smr",
       version := projectVersion,
-      scalaVersion := "2.10.4",
+      scalaVersion := "2.11.5",
       libraryDependencies ++= Seq(
         "com.typesafe.akka" %% "akka-actor" % akkaVersion,
         "com.typesafe.akka" %% "akka-remote" % akkaVersion,
@@ -23,7 +24,7 @@ object AkkaSmrBuild extends Build {
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "joda-time" % "joda-time" % "2.3",
         "org.joda" % "joda-convert" % "1.6",
-        "org.scalatest" %% "scalatest" % "1.9.2" % "test",
+        "org.scalatest" %% "scalatest" % scalatestVersion % "test",
         "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
         "com.typesafe.akka" %% "akka-multi-node-testkit" % akkaVersion % "test",
         "ch.qos.logback" % "logback-classic" % "1.0.13" % "test"

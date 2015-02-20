@@ -5,14 +5,14 @@ import java.nio.file.{Paths, Path}
 import akka.actor._
 import akka.actor.OneForOneStrategy
 import akka.serialization.SerializationExtension
-import com.syntaxjockey.smr.log.{PersistentLog, LogEntry, Log}
+import com.syntaxjockey.smr.command.{Response, Result, Command}
+import com.syntaxjockey.smr.log.{EphemeralLog, PersistentLog, LogEntry, Log}
 import scala.concurrent.duration._
 import scala.util.{Try,Success}
 
 import com.syntaxjockey.smr.raft.RaftProcessor.{ProcessorState, ProcessorData}
 import com.syntaxjockey.smr._
-import com.syntaxjockey.smr.namespace.NamespacePath
-import com.syntaxjockey.smr.world.WorldState
+import com.syntaxjockey.smr.world._
 
 /**
  * A single processor implementing the RAFT state machine replication protocol.
@@ -31,7 +31,7 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
   val maxEntriesBatch: Int = settings.maxEntriesBatch
 
   // persistent server state
-  val logEntries: Log = new PersistentLog(settings.logDirectory, SerializationExtension(context.system))
+  val logEntries: Log = new EphemeralLog(Iterable.empty)
   if (logEntries.isEmpty)
     logEntries.append(InitialEntry)
   var currentTerm: Int = 0
@@ -41,7 +41,7 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
   var commitIndex: Int = 0
   var lastApplied: Int = 0
 
-  var world: WorldState = WorldState.void
+  var world: World = new EphemeralWorld()
 
   startWith(Incubating, NoData)
   log.debug("processor is incubating")
@@ -57,7 +57,7 @@ extends Actor with LoggingFSM[ProcessorState,ProcessorData] with FollowerOperati
     case Event(config: Configuration, NoData) =>
       log.debug("using processor peers {}", config.peers.map(_.path).mkString(", "))
       if (config.peers.size >= minimumProcessors - 1) {
-        world = WorldState(world.version, world.namespaces, ConfigurationState(Vector(config)))
+        world.appendConfiguration(config)
         // redeliver any buffered messages
         unstashAll()
         goto(Follower) using Follower(None)
@@ -108,7 +108,7 @@ object RaftProcessor {
   case class FollowerState(follower: ActorRef, nextIndex: Int, matchIndex: Int, inFlight: Option[AppendEntriesRPC], nextHeartbeat: Option[Cancellable])
 
   case object NullCommand extends Command {
-    def apply(world: WorldState): Try[Response] = Success(Response(world, new Result {}, Map.empty))
+    def apply(world: World): Try[Response] = Success(Response(world, new Result {}, Map.empty))
   }
 
   val InitialEntry = LogEntry(NullCommand, ActorRef.noSender, 0, 0)

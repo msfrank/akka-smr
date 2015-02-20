@@ -1,9 +1,5 @@
 package com.syntaxjockey.smr.raft
 
-import java.io.IOException
-import java.nio.file._
-import java.nio.file.attribute.BasicFileAttributes
-import java.util.UUID
 
 import org.scalatest.{WordSpecLike, BeforeAndAfterAll}
 import org.scalatest.matchers.MustMatchers
@@ -12,9 +8,13 @@ import akka.testkit.{ImplicitSender, TestKit}
 import com.typesafe.config.ConfigFactory
 import scala.concurrent.duration._
 import scala.util.Success
+import java.io.IOException
+import java.nio.file._
+import java.nio.file.attribute.BasicFileAttributes
+import java.util.UUID
 
-import com.syntaxjockey.smr.{PongResult, PingCommand, Configuration, Response}
-import com.syntaxjockey.smr.world.WorldState
+import com.syntaxjockey.smr.command.{Response, Result, Command}
+import com.syntaxjockey.smr.world.{EphemeralWorld, Configuration, World}
 
 class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpecLike with MustMatchers with BeforeAndAfterAll {
   import RaftProcessor._
@@ -125,7 +125,7 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
 class TestExecutor extends Actor with ActorLogging {
   import TestExecutor._
 
-  var world: WorldState = WorldState.void
+  var world: World = new EphemeralWorld
 
   def receive = {
     case command: TestCommand =>
@@ -136,7 +136,6 @@ class TestExecutor extends Actor with ActorLogging {
 }
 
 object TestExecutor {
-  import com.syntaxjockey.smr.{Command,Result}
-  case class TestCommand(lsn: Int) extends Command { def apply(world: WorldState) = Success(Response(world, TestResult(lsn))) }
+  case class TestCommand(lsn: Int) extends Command { def apply(world: World) = Success(Response(world, TestResult(lsn))) }
   case class TestResult(lsn: Int) extends Result
 }

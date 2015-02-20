@@ -1,4 +1,4 @@
-package com.syntaxjockey.smr.namespace
+package com.syntaxjockey.smr.command
 
 class NamespaceException(message: String) extends Exception(message)
 

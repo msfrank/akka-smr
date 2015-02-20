@@ -1,13 +1,14 @@
 package com.syntaxjockey.smr.raft
 
 import akka.actor._
-import com.syntaxjockey.smr.log.{LogEntry, Log}
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 
 import com.syntaxjockey.smr.raft.RaftProcessor._
 import com.syntaxjockey.smr._
-import com.syntaxjockey.smr.world.WorldState
+import com.syntaxjockey.smr.world.{Configuration, World}
+import com.syntaxjockey.smr.command.{Response, Command}
+import com.syntaxjockey.smr.log.{LogEntry, Log}
 
 /*
  * "Followers are passive: they issue no RPCs on their own but simply respond to RPCs
@@ -32,7 +33,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
   var commitIndex: Int
   var lastApplied: Int
 
-  var world: WorldState
+  var world: World
 
   when(Follower) {
 
@@ -103,9 +104,9 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
               // immediately apply any configurations we find
               appendEntries.entries.foreach {
                 case LogEntry(command: ConfigurationCommand, _, _, _) =>
-                  world = WorldState(world.version, world.namespaces, ConfigurationState(world.config.states :+ command.config))
+                  world.appendConfiguration(command.config)
                   log.debug("extended configuration =>\n{}",
-                    world.config.states.map { "  state:\n" + _.peers.map("    " + _.path).mkString("\n") }.mkString("\n")
+                    world.configurations.map { "  state:\n" + _.peers.map("    " + _.path).mkString("\n") }.mkString("\n")
                   )
                 case _ => // do nothing
               }
@@ -121,7 +122,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
                       if (command.config.peers.contains(self))
                         monitor ! SMRClusterChangedEvent
                       log.debug("merged configuration =>\n{}",
-                        updated.config.states.map { "  state:\n" + _.peers.map("    " + _.path).mkString("\n") }.mkString("\n")
+                        updated.configurations.map { "  state:\n" + _.peers.map("    " + _.path).mkString("\n") }.mkString("\n")
                       )
                       updated
                     case Failure(ex) => acc

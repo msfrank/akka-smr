@@ -1,7 +1,7 @@
 package com.syntaxjockey.smr.log
 
 import akka.actor.ActorRef
-import com.syntaxjockey.smr.Command
+import com.syntaxjockey.smr.command.Command
 
 /**
  * A single entry in the RAFT replication log.

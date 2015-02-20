@@ -1,7 +1,10 @@
-package com.syntaxjockey.smr.namespace
+package com.syntaxjockey.smr.world
+
+import java.net.URI
+
+import com.syntaxjockey.smr.command.InvalidPathException
 
 import scala.collection.IndexedSeqLike
-import java.net.URI
 
 final class Path private (val segments: Array[String], val length: Int) extends IndexedSeq[String] with IndexedSeqLike[String,Path] with Serializable {
   import scala.collection.mutable
@@ -11,6 +14,14 @@ final class Path private (val segments: Array[String], val length: Int) extends 
   def apply(idx: Int): String = if (idx < 0 || length <= idx) throw new IndexOutOfBoundsException() else segments.apply(idx)
 
   override def toString(): String = "/" + segments.mkString("/")
+
+  def isRoot = isEmpty
+
+  def notRoot = nonEmpty
+
+  def dirpath: Path = if (length <= 1) Path.root else init
+
+  def entryname: String = last
 }
 
 object Path {

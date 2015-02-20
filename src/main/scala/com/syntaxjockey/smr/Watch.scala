@@ -3,8 +3,8 @@ package com.syntaxjockey.smr
 import akka.actor.{ActorContext, ActorRef}
 import scala.util.{Success, Try}
 
-import com.syntaxjockey.smr.namespace.NamespacePath
-import com.syntaxjockey.smr.world.WorldState
+import com.syntaxjockey.smr.world._
+import com.syntaxjockey.smr.command._
 
 /**
  * A command which can be watched.
@@ -45,12 +45,12 @@ trait MutationCommand extends Command {
   /**
    * Mutate the specified world state, and return the result.
    */
-  def transform(world: WorldState): Try[Response]
+  def transform(world: World): Try[Response]
 
   /**
    * if the specified result is a MutationResult, then update the notification map
    */
-  def apply(world: WorldState): Try[Response] = transform(world) match {
+  def apply(world: World): Try[Response] = transform(world) match {
     case Success(Response(transformed, result: MutationResult, _notifications)) =>
       var notifications = _notifications
       result.notifyPath().foreach {

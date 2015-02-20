@@ -6,6 +6,7 @@ import java.util.UUID
 import akka.testkit.ImplicitSender
 import akka.cluster.Cluster
 import akka.cluster.ClusterEvent.{MemberRemoved, CurrentClusterState, MemberUp}
+import com.syntaxjockey.smr.command.{PongResult, PingCommand}
 import scala.concurrent.duration._
 
 import com.syntaxjockey.smr.raft.{RaftProcessorSettings, RandomBoundedDuration}

@@ -1,14 +1,15 @@
 package com.syntaxjockey.smr.raft
 
 import akka.actor.{ActorRef, LoggingFSM, Actor}
-import com.syntaxjockey.smr.log.{LogEntry, Log}
-import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.FiniteDuration
 import scala.util.{Success,Failure}
 
 import com.syntaxjockey.smr._
+import com.syntaxjockey.smr.command._
+import com.syntaxjockey.smr.log._
+import com.syntaxjockey.smr.world.{Configuration, World}
 import RaftProcessor._
-import com.syntaxjockey.smr.world.WorldState
 
 /*
  * "The leader accepts log entries from clients, replicates them on other servers,
@@ -34,7 +35,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
   var commitIndex: Int
   var lastApplied: Int
 
-  var world: WorldState
+  var world: World
 
   when(Leader) {
 
@@ -57,10 +58,10 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
 
     // we move to a transitional configuration
     case Event(config: Configuration, Leader(followerStates, commitQueue)) =>
-      world = WorldState(world.version, world.namespaces, ConfigurationState(world.config.states :+ config))
+      world.appendConfiguration(config)
       self ! ConfigurationCommand(config)
       log.debug("extended configuration =>\n{}",
-        world.config.states.map { "  state:\n" + _.peers.map("    " + _.path).mkString("\n") }.mkString("\n")
+        world.configurations.map { "  state:\n" + _.peers.map("    " + _.path).mkString("\n") }.mkString("\n")
       )
       // add configuration peers to followers map if they are not in the current followers map
       val addedStates = config.peers.filter { peer => !followerStates.contains(peer) }.map { follower =>
@@ -181,11 +182,11 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
           world = updated
           log.debug("EXEC {} returns {}", logEntry.command, result)
           // signal any outstanding watches
-          if (!notifications.isEmpty) {
+          if (notifications.nonEmpty) {
             // FIXME: should probably send to followers, not peers, but followers contains the wrong ref
             // FIXME: do we send notification to all peers in the transitional state, or just the last state?
-            val peers = if (world.config.states.size == 1) world.config.states.head.peers else world.config.states.flatMap(_.peers).toSet
-            ((peers - self) + monitor).foreach { peer =>
+            val peers = world.processors - self + monitor
+            peers.foreach { peer =>
               log.debug("NOTIFY mutation generated events {}", notifications)
               peer ! NotificationMap(notifications)
             }
@@ -194,7 +195,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
             // if configuration changed, then send event to monitor
             case ConfigurationCommand(config) =>
               log.debug("merged configuration =>\n{}",
-                updated.config.states.map { "  state:\n" + _.peers.map("    " + _.path).mkString("\n") }.mkString("\n")
+                updated.configurations.map { "  state:\n" + _.peers.map("    " + _.path).mkString("\n") }.mkString("\n")
               )
               // FIXME: what if peer has gone away and returned?
               if (config.peers.contains(self))
@@ -209,7 +210,7 @@ trait LeaderOperations extends Actor with LoggingFSM[ProcessorState,ProcessorDat
       }
       // if there are more log entries in the queue, then start committing the next one
       val updatedQueue = commitQueue.tail
-      if (!updatedQueue.isEmpty)
+      if (updatedQueue.nonEmpty)
         self ! ApplyCommitted
       stay() using Leader(followerStates, updatedQueue)
 

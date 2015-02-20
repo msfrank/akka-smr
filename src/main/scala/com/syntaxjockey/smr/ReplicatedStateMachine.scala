@@ -3,12 +3,13 @@ package com.syntaxjockey.smr
 import akka.actor._
 import akka.cluster.Cluster
 import akka.cluster.ClusterEvent._
+import com.syntaxjockey.smr.command.Command
 import com.syntaxjockey.smr.raft.RaftProcessor.Incubating
+import com.syntaxjockey.smr.world.{Configuration, NamespacePath}
 import scala.concurrent.duration._
 import scala.collection.SortedSet
 
 import com.syntaxjockey.smr.raft._
-import com.syntaxjockey.smr.namespace.NamespacePath
 
 /**
  * Proxy actor for coordinating RaftProcessors in a cluster.

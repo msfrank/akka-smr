@@ -1,9 +1,10 @@
-package com.syntaxjockey.smr
+package com.syntaxjockey.smr.command
 
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
-import com.syntaxjockey.smr.namespace.NamespacePath
-import com.syntaxjockey.smr.world.WorldState
+import com.syntaxjockey.smr._
+import com.syntaxjockey.smr.world._
+
 
 /**
  * Wraps one ore more mutation commands in a transaction, so either all of the mutations
@@ -11,8 +12,8 @@ import com.syntaxjockey.smr.world.WorldState
  * a MutationCommand, so it's not possible (nor does it make sense) to nest transactions.
  */
 case class TransactionCommand(commands: Vector[MutationCommand]) extends Command {
-  def apply(world: WorldState): Try[Response] = if (!commands.isEmpty) {
-    var _world: WorldState = world
+  def apply(world: World): Try[Response] = if (commands.nonEmpty) {
+    var _world: World = world
     var notifications: Map[NamespacePath,Notification] = Map.empty
     val results = commands.map { command =>
       command.apply(_world) match {

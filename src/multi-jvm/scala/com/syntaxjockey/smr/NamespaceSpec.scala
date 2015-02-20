@@ -8,10 +8,11 @@ import akka.cluster.Cluster
 import akka.cluster.ClusterEvent.{CurrentClusterState, MemberUp}
 import akka.actor.ActorRef
 import akka.util.ByteString
+import com.syntaxjockey.smr.world.{PathConversions, Path}
 import org.joda.time.DateTime
 import scala.concurrent.duration._
 
-import com.syntaxjockey.smr.namespace._
+import com.syntaxjockey.smr.command._
 import com.syntaxjockey.smr.raft.{RaftProcessorSettings, RandomBoundedDuration}
 
 class NamespaceSpecMultiJvmNode1 extends NamespaceSpec
@@ -40,15 +41,16 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
       Cluster(system).join(node(node1).address)
       for (_ <- 0.until(roles.size)) { expectMsgClass(classOf[MemberUp]) }
       enterBarrier("startup")
-      val logDirectory = Paths.get("test-raft-log.%s".format(UUID.randomUUID()))
+      val uuid = UUID.randomUUID()
+      val logDirectory = Paths.get("test-raft-log.%s".format(uuid))
       val settings = RaftProcessorSettings(roles.size, electionTimeout, idleTimeout, maxEntriesBatch, logDirectory, 0)
       rsm = system.actorOf(ReplicatedStateMachine.props(self, settings, None), "rsm")
       within(30 seconds) { expectMsg(SMRClusterReadyEvent) }
       runOn(node1) {
         within(30 seconds) {
-          rsm ! CreateNamespace("foo")
-          val result = expectMsgClass(classOf[CreateNamespaceResult])
-          result.name must be("foo")
+          rsm ! PingCommand(Some(uuid))
+          val result = expectMsgClass(classOf[PongResult])
+          result.correlationId must be(Some(uuid))
         }
       }
       enterBarrier("finished-1")
@@ -89,16 +91,16 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
       enterBarrier("finished-4")
     }
 
-    "delete a namespace" in {
-      enterBarrier("starting-5")
-      runOn(node5) {
-        within(30 seconds) {
-          rsm ! DeleteNamespace("foo")
-          val result = expectMsgClass(classOf[DeleteNamespaceResult])
-          result.name must be("foo")
-        }
-      }
-      enterBarrier("finished-5")
-    }
+//    "delete a namespace" in {
+//      enterBarrier("starting-5")
+//      runOn(node5) {
+//        within(30 seconds) {
+//          rsm ! DeleteNamespace("foo")
+//          val result = expectMsgClass(classOf[DeleteNamespaceResult])
+//          result.name must be("foo")
+//        }
+//      }
+//      enterBarrier("finished-5")
+//    }
   }
 }
