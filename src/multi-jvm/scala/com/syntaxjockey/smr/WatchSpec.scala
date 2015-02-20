@@ -49,7 +49,7 @@ class WatchSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender
       runOn(node1) {
         within(30.seconds) {
           rsm ! PingCommand(Some(uuid))
-          expectMsgClass(classOf[PongResult]) should be(Some(uuid))
+          expectMsgClass(classOf[PongResult]) shouldEqual PongResult(Some(uuid))
           rsm ! CreateNode("/node1", ByteString("hello, world"), DateTime.now())
           expectMsgClass(classOf[CreateNodeResult])
           rsm ! Watch(GetNodeData("/node1"), self)
