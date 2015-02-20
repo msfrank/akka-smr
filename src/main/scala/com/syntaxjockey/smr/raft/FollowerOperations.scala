@@ -176,6 +176,7 @@ trait FollowerOperations extends Actor with LoggingFSM[ProcessorState,ProcessorD
           log.debug("{} becomes the new leader", leader.path)
         case Follower(None) =>
           log.debug("we become follower, awaiting communication from new leader")
+        case _ => // do nothing
       }
       setTimer("follower-timeout", FollowerTimeout, electionTimeout.nextDuration)
 
