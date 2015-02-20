@@ -31,7 +31,7 @@ class SMRExtensionSpec extends SMRMultiNodeSpec(SMRExtensionMultiNodeConfig) wit
       for (_ <- 0.until(roles.size)) { expectMsgClass(classOf[MemberUp]) }
       enterBarrier("startup")
       SMR(system)
-      within(30 seconds) { expectMsg(SMRClusterReadyEvent) }
+      within(30.seconds) { expectMsg(SMRClusterReadyEvent) }
       enterBarrier("finished-1")
     }
   }

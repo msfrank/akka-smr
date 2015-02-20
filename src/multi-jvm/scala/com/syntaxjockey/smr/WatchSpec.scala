@@ -27,9 +27,9 @@ class WatchSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender
 
   def initialParticipants = roles.size
 
-  "A Watch" must {
+  "A Watch" should {
 
-    val electionTimeout = RandomBoundedDuration(4500 milliseconds, 5000 milliseconds)
+    val electionTimeout = RandomBoundedDuration(4500.milliseconds, 5000.milliseconds)
     val idleTimeout = 2.seconds
     val maxEntriesBatch = 10
     var rsm: ActorRef = ActorRef.noSender
@@ -45,11 +45,11 @@ class WatchSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender
       val logDirectory = Paths.get("test-raft-log.%s".format(uuid))
       val settings = RaftProcessorSettings(roles.size, electionTimeout, idleTimeout, maxEntriesBatch, logDirectory, 0)
       rsm = system.actorOf(ReplicatedStateMachine.props(self, settings, None), "rsm")
-      within(30 seconds) { expectMsg(SMRClusterReadyEvent) }
+      within(30.seconds) { expectMsg(SMRClusterReadyEvent) }
       runOn(node1) {
-        within(30 seconds) {
+        within(30.seconds) {
           rsm ! PingCommand(Some(uuid))
-          expectMsgClass(classOf[PongResult]) must be(Some(uuid))
+          expectMsgClass(classOf[PongResult]) should be(Some(uuid))
           rsm ! CreateNode("foo", "/node1", ByteString("hello, world"), DateTime.now())
           expectMsgClass(classOf[CreateNodeResult])
           rsm ! Watch(GetNodeData("foo", "/node1"), self)
@@ -57,8 +57,8 @@ class WatchSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender
           rsm ! SetNodeData("foo", "/node1", ByteString("node data changed"), None, DateTime.now())
           val notification = expectMsgClass(classOf[Notification])
           val expectedPath =  NamespacePath("foo", "/node1")
-          notification.nspath must be === expectedPath
-          notification.event must be(Notification.NodeDataChangedEvent)
+          notification.nspath shouldEqual expectedPath
+          notification.event should be(Notification.NodeDataChangedEvent)
           expectMsgClass(classOf[SetNodeDataResult])
         }
       }
@@ -68,7 +68,7 @@ class WatchSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender
     "notify observer about a data event" in {
       enterBarrier("starting-2")
       runOn(node2) {
-        within(30 seconds) {
+        within(30.seconds) {
           rsm ! CreateNode("foo", "/node2", ByteString("hello, world"), DateTime.now())
           expectMsgClass(classOf[CreateNodeResult])
           rsm ! Watch(GetNodeData("foo", "/node2"), self)
@@ -76,12 +76,12 @@ class WatchSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender
           enterBarrier("set-watch")
           val notification = expectMsgClass(classOf[Notification])
           val expectedPath =  NamespacePath("foo", "/node2")
-          notification.nspath must be === expectedPath
-          notification.event must be(Notification.NodeDataChangedEvent)
+          notification.nspath shouldEqual expectedPath
+          notification.event should be(Notification.NodeDataChangedEvent)
         }
       }
       runOn(node3) {
-        within(30 seconds) {
+        within(30.seconds) {
           enterBarrier("set-watch")
           rsm ! SetNodeData("foo", "/node2", ByteString("node data changed"), None, DateTime.now())
           expectMsgClass(classOf[SetNodeDataResult])

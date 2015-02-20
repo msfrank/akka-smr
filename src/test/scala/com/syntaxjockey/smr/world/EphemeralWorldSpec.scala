@@ -1,16 +1,16 @@
-package com.syntaxjockey.smr.command
+package com.syntaxjockey.smr.world
 
-import org.scalatest.{ShouldMatchers, WordSpec}
-import org.joda.time.DateTime
 import akka.util.ByteString
+import com.syntaxjockey.smr.command.{InvalidPathException, RootModification}
+import org.joda.time.DateTime
+import org.scalatest.{ShouldMatchers, WordSpec}
+
 import scala.util.{Failure, Success}
 
-import com.syntaxjockey.smr.world.{EphemeralWorld, Stat, Node, PathConversions}
+class EphemeralWorldSpec extends WordSpec with ShouldMatchers {
+  import com.syntaxjockey.smr.world.PathConversions._
 
-class NamespaceSpec extends WordSpec with ShouldMatchers {
-  import PathConversions._
-
-  "A Namespace" should {
+  "An EphemeralWorld" should {
 
     val timestamp = DateTime.now()
 

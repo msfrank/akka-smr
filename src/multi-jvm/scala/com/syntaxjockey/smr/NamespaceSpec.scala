@@ -29,7 +29,7 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
 
   "A ReplicatedStateMachine cluster" must {
 
-    val electionTimeout = RandomBoundedDuration(4500 milliseconds, 5000 milliseconds)
+    val electionTimeout = RandomBoundedDuration(4500.milliseconds, 5000.milliseconds)
     val idleTimeout = 2.seconds
     val maxEntriesBatch = 10
     var rsm: ActorRef = ActorRef.noSender
@@ -45,12 +45,12 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
       val logDirectory = Paths.get("test-raft-log.%s".format(uuid))
       val settings = RaftProcessorSettings(roles.size, electionTimeout, idleTimeout, maxEntriesBatch, logDirectory, 0)
       rsm = system.actorOf(ReplicatedStateMachine.props(self, settings, None), "rsm")
-      within(30 seconds) { expectMsg(SMRClusterReadyEvent) }
+      within(30.seconds) { expectMsg(SMRClusterReadyEvent) }
       runOn(node1) {
-        within(30 seconds) {
+        within(30.seconds) {
           rsm ! PingCommand(Some(uuid))
           val result = expectMsgClass(classOf[PongResult])
-          result.correlationId must be(Some(uuid))
+          result.correlationId should be(Some(uuid))
         }
       }
       enterBarrier("finished-1")
@@ -59,10 +59,10 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
     "create a namespace node" in {
       enterBarrier("starting-2")
       runOn(node2) {
-        within(30 seconds) {
+        within(30.seconds) {
           rsm ! CreateNode("foo", "/node1", ByteString("hello, world"), DateTime.now())
           val result = expectMsgClass(classOf[CreateNodeResult])
-          result.path.segments must be === Path("/node1").segments
+          result.path.segments shouldEqual Path("/node1").segments
         }
       }
       enterBarrier("finished-2")
@@ -71,7 +71,7 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
     "update a namespace node" in {
       enterBarrier("starting-3")
       runOn(node3) {
-        within(30 seconds) {
+        within(30.seconds) {
           rsm ! SetNodeData("foo", "/node1", ByteString("hello, world"), None, DateTime.now())
           val result = expectMsgClass(classOf[SetNodeDataResult])
         }
@@ -82,10 +82,10 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
     "delete a namespace node" in {
       enterBarrier("starting-4")
       runOn(node4) {
-        within(30 seconds) {
+        within(30.seconds) {
           rsm ! DeleteNode("foo", "/node1", None, DateTime.now())
           val result = expectMsgClass(classOf[DeleteNodeResult])
-          result.path.segments must be === Path("/node1").segments
+          result.path.segments shouldEqual Path("/node1").segments
         }
       }
       enterBarrier("finished-4")
@@ -94,7 +94,7 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
 //    "delete a namespace" in {
 //      enterBarrier("starting-5")
 //      runOn(node5) {
-//        within(30 seconds) {
+//        within(30.seconds) {
 //          rsm ! DeleteNamespace("foo")
 //          val result = expectMsgClass(classOf[DeleteNamespaceResult])
 //          result.name must be("foo")

@@ -1,7 +1,6 @@
 package com.syntaxjockey.smr
 
-import org.scalatest.{WordSpecLike, BeforeAndAfterAll}
-import org.scalatest.matchers.MustMatchers
+import org.scalatest.{ShouldMatchers, WordSpecLike, BeforeAndAfterAll}
 import com.typesafe.config.ConfigFactory
 import akka.remote.testkit.{MultiNodeSpec, MultiNodeSpecCallbacks, MultiNodeConfig}
 import akka.util.Timeout
@@ -13,12 +12,12 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.core.FileAppender
 import ch.qos.logback.classic.spi.ILoggingEvent
 
-abstract class SMRMultiNodeSpec(config: MultiNodeConfig) extends MultiNodeSpec(config) with MultiNodeSpecCallbacks with WordSpecLike with MustMatchers with BeforeAndAfterAll {
+abstract class SMRMultiNodeSpec(config: MultiNodeConfig) extends MultiNodeSpec(config) with MultiNodeSpecCallbacks with WordSpecLike with ShouldMatchers with BeforeAndAfterAll {
 
   override def beforeAll() = multiNodeSpecBeforeAll()
   override def afterAll() = multiNodeSpecAfterAll()
 
-  implicit val timeout = Timeout(10 seconds)
+  implicit val timeout = Timeout(10.seconds)
 
   private val lc = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]
 

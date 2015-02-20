@@ -23,7 +23,7 @@ class ReplicatedStateMachineSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) wi
 
   "A ReplicatedStateMachine cluster" must {
 
-    val electionTimeout = RandomBoundedDuration(4500 milliseconds, 5000 milliseconds)
+    val electionTimeout = RandomBoundedDuration(4500.milliseconds, 5000.milliseconds)
     val idleTimeout = 2.seconds
     val maxEntriesBatch = 10
 
@@ -36,7 +36,7 @@ class ReplicatedStateMachineSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) wi
       val logDirectory = Paths.get("test-raft-log.%s".format(UUID.randomUUID()))
       val settings = RaftProcessorSettings(roles.size, electionTimeout, idleTimeout, maxEntriesBatch, logDirectory, 0)
       system.actorOf(ReplicatedStateMachine.props(self, settings, None), "rsm")
-      within(30 seconds) { expectMsg(SMRClusterReadyEvent) }
+      within(30.seconds) { expectMsg(SMRClusterReadyEvent) }
       enterBarrier("finished")
     }
 
