@@ -50,11 +50,11 @@ class WatchSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender
         within(30.seconds) {
           rsm ! PingCommand(Some(uuid))
           expectMsgClass(classOf[PongResult]) should be(Some(uuid))
-          rsm ! CreateNode("foo", "/node1", ByteString("hello, world"), DateTime.now())
+          rsm ! CreateNode("/node1", ByteString("hello, world"), DateTime.now())
           expectMsgClass(classOf[CreateNodeResult])
-          rsm ! Watch(GetNodeData("foo", "/node1"), self)
+          rsm ! Watch(GetNodeData("/node1"), self)
           expectMsgClass(classOf[GetNodeDataResult])
-          rsm ! SetNodeData("foo", "/node1", ByteString("node data changed"), None, DateTime.now())
+          rsm ! SetNodeData("/node1", ByteString("node data changed"), None, DateTime.now())
           val notification = expectMsgClass(classOf[Notification])
           val expectedPath =  Path("/node1")
           notification.path shouldEqual expectedPath
@@ -69,9 +69,9 @@ class WatchSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender
       enterBarrier("starting-2")
       runOn(node2) {
         within(30.seconds) {
-          rsm ! CreateNode("foo", "/node2", ByteString("hello, world"), DateTime.now())
+          rsm ! CreateNode("/node2", ByteString("hello, world"), DateTime.now())
           expectMsgClass(classOf[CreateNodeResult])
-          rsm ! Watch(GetNodeData("foo", "/node2"), self)
+          rsm ! Watch(GetNodeData("/node2"), self)
           expectMsgClass(classOf[GetNodeDataResult])
           enterBarrier("set-watch")
           val notification = expectMsgClass(classOf[Notification])
@@ -83,7 +83,7 @@ class WatchSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender
       runOn(node3) {
         within(30.seconds) {
           enterBarrier("set-watch")
-          rsm ! SetNodeData("foo", "/node2", ByteString("node data changed"), None, DateTime.now())
+          rsm ! SetNodeData("/node2", ByteString("node data changed"), None, DateTime.now())
           expectMsgClass(classOf[SetNodeDataResult])
         }
       }

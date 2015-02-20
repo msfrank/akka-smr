@@ -12,7 +12,7 @@ import com.syntaxjockey.smr.world._
  */
 sealed trait NodeCommand extends Command
 
-case class NodeExists(namespace: String, path: Path) extends NodeCommand with WatchableCommand {
+case class NodeExists(path: Path) extends NodeCommand with WatchableCommand {
   def apply(world: World): Try[Response] = {
     world.getStat(path) match {
       case Success(stat) =>
@@ -26,7 +26,7 @@ case class NodeExists(namespace: String, path: Path) extends NodeCommand with Wa
   def watchPath() = path
 }
 
-case class GetNodeChildren(namespace: String, path: Path) extends NodeCommand with WatchableCommand {
+case class GetNodeChildren(path: Path) extends NodeCommand with WatchableCommand {
   def apply(world: World): Try[Response] = {
     world.getNode(path) map { node =>
       Response(world, GetNodeChildrenResult(node.stat, node.children.map(path :+ _), this))
@@ -35,26 +35,26 @@ case class GetNodeChildren(namespace: String, path: Path) extends NodeCommand wi
   def watchPath() = path
 }
 
-case class GetNodeData(namespace: String, path: Path) extends NodeCommand with WatchableCommand {
+case class GetNodeData(path: Path) extends NodeCommand with WatchableCommand {
   def apply(world: World): Try[Response] = {
     world.getNode(path) map { node => Response(world, GetNodeDataResult(node.stat, node.data, this)) }
   }
   def watchPath() = path
 }
 
-case class CreateNode(namespace: String, path: Path, data: ByteString, ctime: DateTime, isSequential: Boolean = false) extends NodeCommand with MutationCommand {
+case class CreateNode(path: Path, data: ByteString, ctime: DateTime, isSequential: Boolean = false) extends NodeCommand with MutationCommand {
   def transform(world: World): Try[Response] = {
     world.createNode(path, data, ctime, isSequential) map { node => Response(world, CreateNodeResult(path, this)) }
   }
 }
 
-case class SetNodeData(namespace: String, path: Path, data: ByteString, version: Option[Long], mtime: DateTime) extends NodeCommand with MutationCommand {
+case class SetNodeData(path: Path, data: ByteString, version: Option[Long], mtime: DateTime) extends NodeCommand with MutationCommand {
   def transform(world: World): Try[Response] = {
     world.modifyNode(path, data, version, mtime) map { stat => Response(world, SetNodeDataResult(stat, this)) }
   }
 }
 
-case class DeleteNode(namespace: String, path: Path, version: Option[Long], mtime: DateTime) extends NodeCommand with MutationCommand {
+case class DeleteNode(path: Path, version: Option[Long], mtime: DateTime) extends NodeCommand with MutationCommand {
   def transform(world: World): Try[Response] = {
     world.removeNode(path, version, mtime).map { _ => Response(world, DeleteNodeResult(path, this)) }
   }

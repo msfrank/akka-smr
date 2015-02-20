@@ -15,8 +15,8 @@ class TransactionSpec extends WordSpec with ShouldMatchers {
 
     "succeed applying multiple mutations" in {
       val transaction = TransactionCommand(Vector(
-        CreateNode("foo", "/n1", ByteString(), DateTime.now()),
-        SetNodeData("foo", "/n1", ByteString("hello, world!"), None, DateTime.now())
+        CreateNode("/n1", ByteString(), DateTime.now()),
+        SetNodeData("/n1", ByteString("hello, world!"), None, DateTime.now())
       ))
       transaction.apply(new EphemeralWorld) match {
         case Failure(ex) =>
@@ -33,9 +33,9 @@ class TransactionSpec extends WordSpec with ShouldMatchers {
     "fail completely if any single mutation fails" in {
 
       val transaction = TransactionCommand(Vector(
-        CreateNode("foo", "/n1", ByteString.empty, DateTime.now()),
-        SetNodeData("foo", "/n1", ByteString("hello, world!"), None, DateTime.now()),
-        SetNodeData("foo", "/absent", ByteString.empty, None, DateTime.now())
+        CreateNode("/n1", ByteString.empty, DateTime.now()),
+        SetNodeData("/n1", ByteString("hello, world!"), None, DateTime.now()),
+        SetNodeData("/absent", ByteString.empty, None, DateTime.now())
       ))
       transaction.apply(new EphemeralWorld) match {
         case Failure(ex) =>

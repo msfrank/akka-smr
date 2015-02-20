@@ -15,13 +15,13 @@ import scala.concurrent.duration._
 import com.syntaxjockey.smr.command._
 import com.syntaxjockey.smr.raft.{RaftProcessorSettings, RandomBoundedDuration}
 
-class NamespaceSpecMultiJvmNode1 extends NamespaceSpec
-class NamespaceSpecMultiJvmNode2 extends NamespaceSpec
-class NamespaceSpecMultiJvmNode3 extends NamespaceSpec
-class NamespaceSpecMultiJvmNode4 extends NamespaceSpec
-class NamespaceSpecMultiJvmNode5 extends NamespaceSpec
+class NodeCommandSpecMultiJvmNode1 extends NodeCommandSpec
+class NodeCommandSpecMultiJvmNode2 extends NodeCommandSpec
+class NodeCommandSpecMultiJvmNode3 extends NodeCommandSpec
+class NodeCommandSpecMultiJvmNode4 extends NodeCommandSpec
+class NodeCommandSpecMultiJvmNode5 extends NodeCommandSpec
 
-class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender {
+class NodeCommandSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSender {
   import SMRMultiNodeConfig._
   import PathConversions._
 
@@ -34,7 +34,7 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
     val maxEntriesBatch = 10
     var rsm: ActorRef = ActorRef.noSender
 
-    "create a namespace" in {
+    "initialize" in {
       enterBarrier("starting-1")
       Cluster(system).subscribe(testActor, classOf[MemberUp])
       expectMsgClass(classOf[CurrentClusterState])
@@ -56,11 +56,11 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
       enterBarrier("finished-1")
     }
 
-    "create a namespace node" in {
+    "create a node" in {
       enterBarrier("starting-2")
       runOn(node2) {
         within(30.seconds) {
-          rsm ! CreateNode("foo", "/node1", ByteString("hello, world"), DateTime.now())
+          rsm ! CreateNode("/node1", ByteString("hello, world"), DateTime.now())
           val result = expectMsgClass(classOf[CreateNodeResult])
           result.path.segments shouldEqual Path("/node1").segments
         }
@@ -68,22 +68,22 @@ class NamespaceSpec extends SMRMultiNodeSpec(SMRMultiNodeConfig) with ImplicitSe
       enterBarrier("finished-2")
     }
 
-    "update a namespace node" in {
+    "update a node" in {
       enterBarrier("starting-3")
       runOn(node3) {
         within(30.seconds) {
-          rsm ! SetNodeData("foo", "/node1", ByteString("hello, world"), None, DateTime.now())
+          rsm ! SetNodeData("/node1", ByteString("changed content"), None, DateTime.now())
           val result = expectMsgClass(classOf[SetNodeDataResult])
         }
       }
       enterBarrier("finished-3")
     }
 
-    "delete a namespace node" in {
+    "delete a node" in {
       enterBarrier("starting-4")
       runOn(node4) {
         within(30.seconds) {
-          rsm ! DeleteNode("foo", "/node1", None, DateTime.now())
+          rsm ! DeleteNode("/node1", None, DateTime.now())
           val result = expectMsgClass(classOf[DeleteNodeResult])
           result.path.segments shouldEqual Path("/node1").segments
         }

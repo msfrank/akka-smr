@@ -1,6 +1,5 @@
 package com.syntaxjockey.smr
 
-import akka.remote.testkit.MultiNodeSpec
 import akka.testkit.ImplicitSender
 import akka.cluster.Cluster
 import akka.cluster.ClusterEvent.{CurrentClusterState, MemberUp}
