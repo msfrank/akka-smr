@@ -91,7 +91,7 @@ class EphemeralWorld extends World {
   override def deleteNode(transaction: Transaction, path: Path): Try[Unit] = transaction match {
     case txn: EphemeralTxn =>
       _namespace.remove(path) match {
-        case Some(node) => Success()
+        case Some(node) => Success(Unit)
         case None => Failure(new InvalidPathException("node doesn't exist"))
       }
     case unknown =>

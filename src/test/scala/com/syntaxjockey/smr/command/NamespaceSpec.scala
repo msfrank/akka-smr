@@ -1,17 +1,16 @@
 package com.syntaxjockey.smr.command
 
-import org.scalatest.WordSpec
-import org.scalatest.matchers.MustMatchers
+import org.scalatest.{ShouldMatchers, WordSpec}
 import org.joda.time.DateTime
 import akka.util.ByteString
 import scala.util.{Failure, Success}
 
 import com.syntaxjockey.smr.world.{EphemeralWorld, Stat, Node, PathConversions}
 
-class NamespaceSpec extends WordSpec with MustMatchers {
+class NamespaceSpec extends WordSpec with ShouldMatchers {
   import PathConversions._
 
-  "A Namespace" must {
+  "A Namespace" should {
 
     val timestamp = DateTime.now()
 
@@ -35,42 +34,42 @@ class NamespaceSpec extends WordSpec with MustMatchers {
 
     "find the root node" in {
       val world = makeWorld
-      world.findNode("/") must be === Some(root)
+      world.findNode("/") shouldEqual Some(root)
     }
 
     "find an intermediate node" in {
       val world = makeWorld
-      world.findNode("/bar") must be === Some(bar)
+      world.findNode("/bar") shouldEqual Some(bar)
     }
 
     "find a leaf node" in {
       val world = makeWorld
-      world.findNode("/bar/qux") must be === Some(qux)
+      world.findNode("/bar/qux") shouldEqual Some(qux)
     }
 
     "return None when trying to find a node which doesn't exist" in {
       val world = makeWorld
-      world.findNode("/foo/baz") must be === None
+      world.findNode("/foo/baz") shouldEqual None
     }
 
     "return true if a root node exists" in {
       val world = makeWorld
-      world.checkNode("/") must be(true)
+      world.checkNode("/") should be(true)
     }
 
     "return true if an intermediate node exists" in {
       val world = makeWorld
-      world.checkNode("/bar") must be(true)
+      world.checkNode("/bar") should be(true)
     }
 
     "return true if a leaf node exists" in {
       val world = makeWorld
-      world.checkNode("/bar/qux") must be(true)
+      world.checkNode("/bar/qux") should be(true)
     }
 
     "return false if a node doesn't exist" in {
       val world = makeWorld
-      world.checkNode("/foo/baz") must be(false)
+      world.checkNode("/foo/baz") should be(false)
     }
 
     "create a new node" in {
@@ -78,16 +77,16 @@ class NamespaceSpec extends WordSpec with MustMatchers {
       val ctime = DateTime.now()
       val version = world.version
       val result = world.createNode("/foo/new", ByteString("test data"), ctime, isSequential = false)
-      world.version must equal(version + 1)
+      world.version should equal(version + 1)
       result match {
         case Failure(ex) =>
           fail("create /foo/new failed: " + ex)
         case Success(node) =>
-          node.name must equal("new")
-          node.data must be === ByteString("test data")
-          node.children must equal(Set.empty)
-          node.stat.dataVersion must equal(version + 1)
-          node.stat.childrenVersion must equal(version + 1)
+          node.name should equal("new")
+          node.data shouldEqual ByteString("test data")
+          node.children should equal(Set.empty)
+          node.stat.dataVersion should equal(version + 1)
+          node.stat.childrenVersion should equal(version + 1)
       }
     }
 
@@ -96,17 +95,17 @@ class NamespaceSpec extends WordSpec with MustMatchers {
       val ctime = DateTime.now()
       val version = world.version
       val result = world.createNode("/foo/seq", ByteString("test data"), ctime, isSequential = true)
-      world.version must equal(version + 1)
+      world.version should equal(version + 1)
       result match {
         case Failure(ex) =>
           fail("create /foo/seq-00000001 failed: " + ex)
         case Success(node) =>
-          node.name must equal("seq-00000001")
-          node.data must be === ByteString("test data")
-          node.children must equal(Set.empty)
-          node.stat.dataVersion must equal(version + 1)
-          node.stat.childrenVersion must equal(version + 1)
-          world.getNode("/foo").get.stat.seqCounter must equal(1)
+          node.name should equal("seq-00000001")
+          node.data shouldEqual ByteString("test data")
+          node.children should equal(Set.empty)
+          node.stat.dataVersion should equal(version + 1)
+          node.stat.childrenVersion should equal(version + 1)
+          world.getNode("/foo").get.stat.seqCounter should equal(1)
       }
     }
 
@@ -146,8 +145,8 @@ class NamespaceSpec extends WordSpec with MustMatchers {
       val version = world.version
       world.removeNode("/foo", None, mtime) match {
         case Success(()) =>
-          world.version must equal(version + 1)
-          world.checkNode("/foo") must equal(false)
+          world.version should equal(version + 1)
+          world.checkNode("/foo") should equal(false)
         case Failure(ex) =>
           fail("remove /foo failed: " + ex)
       }
@@ -159,8 +158,8 @@ class NamespaceSpec extends WordSpec with MustMatchers {
       val version = world.version
       world.removeNode("/foo", Some(2), mtime) match {
         case Success(()) =>
-          world.version must equal(version + 1)
-          world.checkNode("/foo") must equal(false)
+          world.version should equal(version + 1)
+          world.checkNode("/foo") should equal(false)
         case Failure(ex) =>
           fail("remove /foo failed: " + ex)
       }

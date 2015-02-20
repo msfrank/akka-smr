@@ -17,5 +17,6 @@ case class RandomBoundedDuration(lowerBound: FiniteDuration, upperBound: FiniteD
 }
 
 object RandomBoundedDuration {
+  import scala.language.implicitConversions
   implicit def randomBounded2FiniteDuration(r: RandomBoundedDuration): FiniteDuration = r.nextDuration
 }

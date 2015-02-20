@@ -1,7 +1,6 @@
 package com.syntaxjockey.smr
 
-import org.scalatest.WordSpec
-import org.scalatest.matchers.MustMatchers
+import org.scalatest.{ShouldMatchers, WordSpec}
 import akka.util.ByteString
 import org.joda.time.DateTime
 import scala.util.{Success, Failure}
@@ -10,9 +9,9 @@ import com.syntaxjockey.smr.command._
 import com.syntaxjockey.smr.world.{EphemeralWorld, PathConversions, World}
 import PathConversions._
 
-class TransactionSpec extends WordSpec with MustMatchers {
+class TransactionSpec extends WordSpec with ShouldMatchers {
 
-  "A TransactionCommand" must {
+  "A TransactionCommand" should {
 
     "succeed applying multiple mutations" in {
       val transaction = TransactionCommand(Vector(
@@ -23,9 +22,9 @@ class TransactionSpec extends WordSpec with MustMatchers {
         case Failure(ex) =>
           fail("transaction failed", ex)
         case Success(Response(world, result: TransactionResult, notifications)) =>
-          result.results.length must be(2)
+          result.results.length should be(2)
           val node = world.getNode("/n1").get
-          node.data must be === ByteString("hello, world!")
+          node.data shouldEqual ByteString("hello, world!")
         case Success(result) =>
           fail("transaction didn't return TransactionResult")
       }
@@ -52,7 +51,7 @@ class TransactionSpec extends WordSpec with MustMatchers {
           if (!ex.isInstanceOf[IllegalArgumentException])
             fail("empty transaction failed with unexpected exception", ex)
         case Success(_) =>
-          fail("empty transaction must not succeed")
+          fail("empty transaction should not succeed")
       }
     }
   }

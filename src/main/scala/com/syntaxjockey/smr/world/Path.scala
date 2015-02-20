@@ -70,6 +70,7 @@ object Path {
 case class NamespacePath(namespace: String, path: Path)
 
 object PathConversions {
+  import scala.language.implicitConversions
   implicit def string2Path(string: String): Path = Path(string)
   implicit def seq2Path(seq: Seq[String]): Path = Path(seq)
   implicit def uri2NamespacePath(uri: URI): NamespacePath = NamespacePath(uri.getHost, Path(uri.getPath))

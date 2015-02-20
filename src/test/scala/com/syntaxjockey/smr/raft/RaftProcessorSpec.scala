@@ -1,8 +1,6 @@
 package com.syntaxjockey.smr.raft
 
-
-import org.scalatest.{WordSpecLike, BeforeAndAfterAll}
-import org.scalatest.matchers.MustMatchers
+import org.scalatest.{ShouldMatchers, WordSpecLike, BeforeAndAfterAll}
 import akka.actor.{ActorRef, ActorLogging, Actor, ActorSystem}
 import akka.testkit.{ImplicitSender, TestKit}
 import com.typesafe.config.ConfigFactory
@@ -16,7 +14,7 @@ import java.util.UUID
 import com.syntaxjockey.smr.command.{Response, Result, Command}
 import com.syntaxjockey.smr.world.{EphemeralWorld, Configuration, World}
 
-class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpecLike with MustMatchers with BeforeAndAfterAll {
+class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpecLike with ShouldMatchers with BeforeAndAfterAll {
   import RaftProcessor._
   import TestExecutor._
 
@@ -26,7 +24,7 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
     TestKit.shutdownActorSystem(system)
   }
 
-  "RaftProcessor" must {
+  "RaftProcessor" should {
 
     val idleTimeout = 2.seconds
     val maxEntriesBatch = 10
@@ -71,9 +69,9 @@ class RaftProcessorSpec(_system: ActorSystem) extends TestKit(_system) with Impl
 //      ref.stateName.isInstanceOf[Candidate.type] should === (true)
 //    }
 
-    "pick a leader" in withSettings(3, 1 second, 1 second) { settings1 =>
-                       withSettings(3, 2 seconds, 2 seconds) { settings2 =>
-                       withSettings(3, 3 seconds, 3 seconds) { settings3 =>
+    "pick a leader" in withSettings(3, 1.second, 1.second) { settings1 =>
+                       withSettings(3, 2.seconds, 2.seconds) { settings2 =>
+                       withSettings(3, 3.seconds, 3.seconds) { settings3 =>
       val processor1 = system.actorOf(RaftProcessor.props(self, settings1))
       val processor2 = system.actorOf(RaftProcessor.props(self, settings2))
       val processor3 = system.actorOf(RaftProcessor.props(self, settings3))

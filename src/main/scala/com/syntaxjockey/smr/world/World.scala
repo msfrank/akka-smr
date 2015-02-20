@@ -147,7 +147,7 @@ trait World {
               putStat(txn, ancestorPath, ancestorStat.copy(childrenVersion = txn.version, modifiedChildren = mtime)).get
             }
           }
-          Success()
+          Success(Unit)
         }
       }
     } else Failure(new RootModification())
